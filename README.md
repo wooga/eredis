@@ -35,7 +35,7 @@ is always the binary value returned by Redis, without any type
 conversion.
 
 To start the client, use `eredis:start_link/0` or
-eredis:start_link/4`. `start_link/4` takes the following arguments:
+`eredis:start_link/4`. `start_link/4` takes the following arguments:
 
 * Host, dns name or ip adress as string
 * Port, integer
@@ -95,7 +95,7 @@ socket is always set to active once, which will let us receive data
 fast without blocking the gen_server. The tradeoff is that we must
 parse partial responses, which makes the parser more complex.
 
-In order to make multibulk responses as fast as possible, the parser
+In order to make multibulk responses more efficient, the parser
 will parse all data available and continue where it left off when more
 data is available.
 
@@ -106,7 +106,7 @@ every call to `parse/2`. This might create binaries that will be
 reference counted. This could be improved by replacing it with an
 iolist.
 
-When parsing a big bulk, the parser knows the size of the bulk. If the
+When parsing bulk replies, the parser knows the size of the bulk. If the
 bulk is big and would come in many chunks, this could improved by
 having the client explicitly use `gen_tcp:recv/2` to fetch the entire
 bulk at once.
