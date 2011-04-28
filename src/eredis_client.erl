@@ -43,6 +43,7 @@
 }).
 
 -define(SOCKET_OPTS, [binary, {active, once}, {packet, raw}, {reuseaddr, true}]).
+-define(RECONNECT_SLEEP, 100). %% Sleep between reconnect attempts, in milliseconds
 
 %%
 %% API
@@ -76,19 +77,14 @@ init([Host, Port, Database, Password]) ->
     end.
 
 handle_call({request, Req}, From, State) ->
-    case gen_tcp:send(State#state.socket, Req) of
-        ok ->
-            NewQueue = queue:in(From, State#state.queue),
-            {noreply, State#state{queue = NewQueue}};
-        {error, Reason} ->
-            {reply, {error, Reason}, State}
-    end;
+    do_request(Req, From, State);
 
 handle_call(stop, _From, State) ->
     {stop, normal, State};
 
 handle_call(_Request, _From, State) ->
     {reply, unknown_request, State}.
+
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -98,23 +94,32 @@ handle_info({tcp, _Socket, Bs}, State) ->
     inet:setopts(State#state.socket, [{active, once}]),
     {noreply, handle_response(Bs, State)};
 
-%% Socket got closed, for example by Redis terminating idle clients.
-%% Reconnect and if it fails, stop the gen_server.
+%% Socket got closed, for example by Redis terminating idle
+%% clients. Spawn of a new process which will try to reconnect and
+%% notify us when Redis is ready. In the meantime, we can respond with
+%% an error message to all our clients.
 handle_info({tcp_closed, _Socket}, State) ->
-    case connect(State) of
-        {ok, NewState} ->
-            %% Throw away the queue, as we will never get a response
-            %% for the requests sent on the old socket, ever
-            {noreply, NewState#state{queue = queue:new()}};
-        {error, Reason} ->
-            {stop, {reconnect_error, Reason}}
-    end;
+    Self = self(),
+    spawn(fun() -> reconnect_loop(Self, State) end),
+
+    %% Throw away the socket and the queue, as we will never get a
+    %% response to the requests sent on the old socket. The absence of
+    %% a socket is used to signal we are "down"
+    {noreply, State#state{socket = undefined, queue = queue:new()}};
+
+%% Redis is ready to accept requests, the given Socket is a socket
+%% already connected and authenticated.
+handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
+    {noreply, State#state{socket = Socket}};
 
 handle_info(_Info, State) ->
-    {noreply, State}.
+    {stop, {unhandled_message, _Info}, State}.
 
 terminate(_Reason, State) ->
-    gen_tcp:close(State#state.socket),
+    case State#state.socket of
+        undefined -> ok;
+        Socket    -> gen_tcp:close(Socket)
+    end,
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -123,6 +128,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+-spec do_request(Req::iolist(), From::pid(), #state{}) ->
+                        {noreply, #state{}} | {reply, Reply::any(), #state{}}.
+%% @doc: Sends the given request to redis. If we do not have a
+%% connection, returns error.
+do_request(_Req, _From, #state{socket = undefined} = State) ->
+    {reply, {error, no_connection}, State};
+
+do_request(Req, From, State) ->
+    case gen_tcp:send(State#state.socket, Req) of
+        ok ->
+            NewQueue = queue:in(From, State#state.queue),
+            {noreply, State#state{queue = NewQueue}};
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
+    end.
 
 -spec handle_response(Data::binary(), State::#state{}) -> NewState::#state{}.
 %% @doc: Handle the response coming from Redis. This includes parsing
@@ -212,4 +233,23 @@ do_sync_command(Socket, Command) ->
             end;
         {error, Reason} ->
             {error, Reason}
+    end.
+
+%% @doc: Loop until a connection can be established, this includes
+%% successfully issuing the auth and select calls. When we have a
+%% connection, give the socket to the redis client.
+reconnect_loop(Client, State) ->
+    case catch(connect(State)) of
+        {ok, #state{socket = Socket}} ->
+            gen_tcp:controlling_process(Socket, Client),
+            Client ! {connection_ready, Socket};
+        {error, _Reason} ->
+            timer:sleep(?RECONNECT_SLEEP),
+            reconnect_loop(Client, State);
+        %% Something bad happened when connecting, like Redis might be
+        %% loading the dataset and we got something other than 'OK' in
+        %% auth or select
+        {'EXIT', _} ->
+            timer:sleep(?RECONNECT_SLEEP),
+            reconnect_loop(Client, State)
     end.

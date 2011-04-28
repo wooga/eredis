@@ -42,13 +42,21 @@ To start the client, use `eredis:start_link/0` or
 * Password, string or empty string([]) for no password
 * Database, integer or 0 for default database
 
-## Reconnecting on time out
+## Reconnecting on Redis down / network failure / timeout / etc
 
-Redis will disconnect any client that is idle for more than the
-configured timeout. When this happens, Eredis will automatically
-reconnect. In other words, there will always be one open connection to
-Redis for every client. If re-establishing the connection fails, the
-client terminates.
+When Eredis for some reason looses the connection to Redis, Eredis
+will keep trying to reconnect until a connection is successfully
+established, which includes the AUTH and SELECT calls. The sleep time
+between attempts to reconnect is 100 milliseconds.
+
+As long as the connection is down, Eredis will respond to any request
+immediately with `{error, no_connection}` without actually trying to
+connect. This serves as a kind of circuit breaker and prevents a
+stampede of clients just waiting for a failed connection attempt or
+`gen_server:call` timeout.
+
+Note: If Eredis is starting up and cannot connect, it will fail
+immediately with `{connection_error, Reason}`.
 
 ## AUTH and SELECT
 
