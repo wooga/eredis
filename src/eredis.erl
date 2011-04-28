@@ -11,8 +11,12 @@
 
 -include("eredis.hrl").
 
+%% Default timeout for calls to the client gen_server
+%% Specified in http://www.erlang.org/doc/man/gen_server.html#call-3
+-define(TIMEOUT, 5000).
+
 -export([start_link/0, start_link/2, start_link/3, start_link/4,
-         q/2]).
+         q/2, q/3]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -46,15 +50,19 @@ start_link(Host, Port,  Database, Password) when is_list(Host);
 %% data which will be converted to binaries. The returned values will
 %% always be binaries.
 q(Client, Command) ->
-    call(Client, Command).
+    call(Client, Command, ?TIMEOUT).
+
+q(Client, Command, Timeout) ->
+    call(Client, Command, Timeout).
 
 
 %%
-%% INTERNAL HELPERS%%
+%% INTERNAL HELPERS
+%%
 
-call(Client, Command) ->
+call(Client, Command, Timeout) ->
     Request = {request, create_multibulk(Command)},
-    gen_server:call(Client, Request).
+    gen_server:call(Client, Request, Timeout).
 
 -spec create_multibulk(Args::iolist()) -> Command::iolist().
 %% @doc: Creates a multibulk command with all the correct size headers
