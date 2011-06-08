@@ -6,11 +6,17 @@
 -export([value_gen/1]).
 
 new(_Id) ->
-    case eredis:start_link() of
-        {ok, Client} ->
-            {ok, Client};
-        {error, Reason} ->
-            {error, Reason}
+    case whereis(eredis_driver) of
+        undefined ->
+            case eredis:start_link() of
+                {ok, Client} ->
+                    register(eredis_driver, Client),
+                    {ok, Client};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        Pid ->
+            {ok, Pid}
     end.
 
 run(get, KeyGen, _ValueGen, Client) ->
