@@ -171,6 +171,10 @@ do_parse_multibulk(Count, Data, Acc) ->
 %% BULK
 %%
 
+parse_bulk(<<$+, Data/binary>>) -> parse_simple(Data);
+parse_bulk(<<$-, Data/binary>>) -> parse_simple(Data);
+parse_bulk(<<$:, Data/binary>>) -> parse_simple(Data);
+
 %% Bulk, at beginning of response
 parse_bulk(<<$$, _/binary>> = Data) ->
     %% Find the position of the first terminator, everything up until

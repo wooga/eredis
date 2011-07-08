@@ -245,3 +245,15 @@ error_test() ->
 integer_test() ->
     B = <<":2\r\n">>,
     ?assertEqual({ok, <<"2">>, init()}, parse(init(), B)).
+
+integer_reply_inside_multibulk_test() ->
+    B = <<"*2\r\n:1\r\n:1\r\n">>,
+    ?assertEqual({ok, [<<"1">>, <<"1">>], init()}, parse(init(), B)).
+
+status_inside_multibulk_test() ->
+    B = <<"*2\r\n+OK\r\n:1\r\n">>,
+    ?assertEqual({ok, [<<"OK">>, <<"1">>], init()}, parse(init(), B)).
+
+error_inside_multibulk_test() ->
+    B = <<"*2\r\n-ERR foobar\r\n:1\r\n">>,
+    ?assertEqual({ok, [<<"ERR foobar">>, <<"1">>], init()}, parse(init(), B)).
