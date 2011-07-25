@@ -249,12 +249,13 @@ parse_simple({incomplete_simple, OldData}, NewData0) ->
 %%
 
 get_newline_pos(B) ->
-    case binary:match(B, <<?NL>>) of
-        {Pos, _} ->
-            Pos;
-        nomatch ->
-            undefined
-    end.
+   [H|_] = re:split(B, ?NL),
+   Pos = size(H),
+   case Pos =:= size(B) of                                                                                                                                                                               
+     true -> undefined;
+     false -> Pos
+   end.
+ 
 
 %% @doc: Helper for handling the result of parsing. Will update the
 %% parser state with the continuation of given name if necessary.
