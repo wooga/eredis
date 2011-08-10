@@ -39,8 +39,8 @@ To start the client, use `eredis:start_link/0` or
 
 * Host, dns name or ip adress as string
 * Port, integer
-* Password, string or empty string([]) for no password
 * Database, integer or 0 for default database
+* Password, string or empty string([]) for no password
 
 ## Reconnecting on Redis down / network failure / timeout / etc
 
