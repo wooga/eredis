@@ -26,6 +26,8 @@ EUnit tests:
 
     ./rebar eunit
 
+Eredis uses the `binary` module which was introduced in R14.
+
 ## Commands
 
 Eredis has only one function to interact with redis, which is
