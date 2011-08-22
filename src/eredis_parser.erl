@@ -247,15 +247,12 @@ parse_simple({incomplete_simple, OldData}, NewData0) ->
 %%
 %% INTERNAL HELPERS
 %%
-
 get_newline_pos(B) ->
-   [H|_] = re:split(B, ?NL),
-   Pos = size(H),
-   case Pos =:= size(B) of                                                                                                                                                                               
-     true -> undefined;
-     false -> Pos
-   end.
- 
+    case re:run(B, ?NL) of
+        {match, [{Pos, _}]} -> Pos;
+        nomatch -> undefined
+    end.
+
 
 %% @doc: Helper for handling the result of parsing. Will update the
 %% parser state with the continuation of given name if necessary.
