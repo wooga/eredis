@@ -247,14 +247,12 @@ parse_simple({incomplete_simple, OldData}, NewData0) ->
 %%
 %% INTERNAL HELPERS
 %%
-
 get_newline_pos(B) ->
-    case binary:match(B, <<?NL>>) of
-        {Pos, _} ->
-            Pos;
-        nomatch ->
-            undefined
+    case re:run(B, ?NL) of
+        {match, [{Pos, _}]} -> Pos;
+        nomatch -> undefined
     end.
+
 
 %% @doc: Helper for handling the result of parsing. Will update the
 %% parser state with the continuation of given name if necessary.
