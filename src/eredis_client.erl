@@ -249,7 +249,7 @@ reconnect_loop(Client, State) ->
         %% Something bad happened when connecting, like Redis might be
         %% loading the dataset and we got something other than 'OK' in
         %% auth or select
-        {'EXIT', _} ->
+        _ ->
             timer:sleep(?RECONNECT_SLEEP),
             reconnect_loop(Client, State)
     end.
