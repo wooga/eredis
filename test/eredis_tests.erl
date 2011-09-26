@@ -6,7 +6,7 @@
 
 get_set_test() ->
     C = c(),
-    ?assertEqual({ok, <<"OK">>}, eredis:q(C, ["FLUSHALL"])),
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL", foo])),
 
     ?assertEqual({ok, undefined}, eredis:q(C, ["GET", foo])),
     ?assertEqual({ok, <<"OK">>}, eredis:q(C, ["SET", foo, bar])),
@@ -15,7 +15,7 @@ get_set_test() ->
 
 delete_test() ->
     C = c(),
-    ?assertEqual({ok, <<"OK">>}, eredis:q(C, ["FLUSHALL"])),
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL", foo])),
 
     ?assertEqual({ok, <<"OK">>}, eredis:q(C, ["SET", foo, bar])),
     ?assertEqual({ok, <<"1">>}, eredis:q(C, ["DEL", foo])),
@@ -23,13 +23,16 @@ delete_test() ->
 
 mset_mget_test() ->
     C = c(),
-    ?assertEqual({ok, <<"OK">>}, eredis:q(C, ["FLUSHALL"])),
     Keys = lists:seq(1, 1000),
+
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL" | Keys])),
+
     KeyValuePairs = [[K, K*2] || K <- Keys],
     ExpectedResult = [list_to_binary(integer_to_list(K * 2)) || K <- Keys],
 
     ?assertEqual({ok, <<"OK">>}, eredis:q(C, ["MSET" | lists:flatten(KeyValuePairs)])),
-    ?assertEqual({ok, ExpectedResult}, eredis:q(C, ["MGET" | Keys])).
+    ?assertEqual({ok, ExpectedResult}, eredis:q(C, ["MGET" | Keys])),
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL" | Keys])).
 
 c() ->
     Res = eredis:start_link(),
