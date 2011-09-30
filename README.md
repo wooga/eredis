@@ -1,7 +1,6 @@
 # eredis
 
-Redis client with a focus on performance. Eredis also supports AUTH
-and SELECT.
+Redis client with a focus on performance and robustness. Eredis also supports AUTH, SELECT and poolboy.
 
 ## Example
 
@@ -31,24 +30,29 @@ EUnit tests:
 
 Eredis has only one function to interact with redis, which is
 `eredis:q(Client::pid(), Command::iolist())`. The response will either
-be `{ok, Value::binary()}` or `{error, Message::binary()}`. The value
-is always the binary value returned by Redis, without any type
+be `{ok, Value::binary() | [binary()]}` or `{error,
+Message::binary()}`. The value is always the exact value returned by
+Redis, without any type conversion. If Redis returns a list of values,
+this list is returned in the exact same order without any type
 conversion.
 
-To start the client, use `eredis:start_link/0` or
-`eredis:start_link/4`. `start_link/4` takes the following arguments:
+To start the client, use any of the `eredis:start_link/0,1,2,3,4,5`
+functions. They all include sensible defaults. `start_link/5` takes
+the following arguments:
 
 * Host, dns name or ip adress as string
-* Port, integer
+* Port, integer, default is 6379
 * Database, integer or 0 for default database
 * Password, string or empty string([]) for no password
+* Reconnect sleep, integer of milliseconds to sleep between reconnect attempts
 
 ## Reconnecting on Redis down / network failure / timeout / etc
 
 When Eredis for some reason looses the connection to Redis, Eredis
 will keep trying to reconnect until a connection is successfully
-established, which includes the AUTH and SELECT calls. The sleep time
-between attempts to reconnect is 100 milliseconds.
+established, which includes the `AUTH` and `SELECT` calls. The sleep
+time between attempts to reconnect can be set in the
+`eredis:start_link/5` call.
 
 As long as the connection is down, Eredis will respond to any request
 immediately with `{error, no_connection}` without actually trying to
