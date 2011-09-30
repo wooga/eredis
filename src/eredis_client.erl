@@ -25,7 +25,7 @@
 -include("eredis.hrl").
 
 %% API
--export([start_link/4, start_link/5, stop/1, select_database/2]).
+-export([start_link/1, start_link/4, start_link/5, stop/1, select_database/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -48,6 +48,17 @@
 %%
 %% API
 %%
+%% -type Args = [Option].
+%% -type Option = {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, integer()}.
+-spec start_link(Args :: list() ) -> {ok, Pid::pid()} | {error, Reason::term()}.
+start_link(Args) ->
+    Host = proplists:get_value(host, Args, "127.0.0.1"),
+    Port = proplists:get_value(port, Args, 6379),
+    Database = proplists:get_value(database, Args, 0),
+    Password = proplists:get_value(password, Args, ""),
+    ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
+    start_link(Host, Port, Database, Password, ReconnectSleep).
+
 
 -spec start_link(Host::list(), Port::integer(), Database::integer(),
                  Password::string()) -> {ok, Pid::pid()} | {error, Reason::term()}.
@@ -119,6 +130,11 @@ handle_info({tcp_closed, _Socket}, State) ->
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
     {noreply, State#state{socket = Socket}};
+
+%% eredis can be used in Poolboy, but it requires to support a simple API
+%% that Poolboy uses to manage the connections.
+handle_info(stop, State) ->
+    {stop, shutdown, State};
 
 handle_info(_Info, State) ->
     {stop, {unhandled_message, _Info}, State}.
