@@ -1,4 +1,9 @@
--define(NL, "\r\n").
+%% Public types
+
+-type option() :: {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, integer()}.
+-type server_args() :: [option()].
+
+-type return_value() :: binary() | [binary()].
 
 
 %% Continuation data is whatever data returned by any of the parse
@@ -14,3 +19,4 @@
           continuation_data :: continuation_data() | undefined
 }).
 
+-define(NL, "\r\n").

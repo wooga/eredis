@@ -25,20 +25,6 @@
 %% PUBLIC API
 %%
 
-%% -type Args = [Option].
-%% -type Option = {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, integer()}.
--spec start_link( Args :: list() ) -> {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Args) ->
-    Host = proplists:get_value(host, Args, "127.0.0.1"),
-    Port = proplists:get_value(port, Args, 6379),
-    Database = proplists:get_value(database, Args, 0),
-    Password = proplists:get_value(password, Args, ""),
-    ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
-    eredis_client:start_link(Host, Port, Database, Password, ReconnectSleep).
-
-
--spec start_link() -> {ok, Client::pid()} |
-                          {error, {connection_error, Reason::any()}}.
 start_link() ->
     start_link("127.0.0.1", 6379, 0, "").
 
@@ -49,17 +35,30 @@ start_link(Host, Port, Database) ->
     start_link(Host, Port, Database, "").
 
 start_link(Host, Port,  Database, Password) ->
-    start_link(Host, Port, Database, Password, 100).    
+    start_link(Host, Port, Database, Password, 100).
 
-start_link(Host, Port, Database, Password, ReconnectSleep) when is_list(Host);
-                                                                is_integer(Port);
-                                                                is_integer(Database);
-                                                                is_list(Password);
-                                                                is_integer(ReconnectSleep)->
+start_link(Host, Port, Database, Password, ReconnectSleep)
+  when is_list(Host);
+       is_integer(Port);
+       is_integer(Database);
+       is_list(Password);
+       is_integer(ReconnectSleep) ->
+
     eredis_client:start_link(Host, Port, Database, Password, ReconnectSleep).
 
+%% @doc: Callback for starting from poolboy
+-spec start_link(server_args()) -> {ok, Pid::pid()} | {error, Reason::term()}.
+start_link(Args) ->
+    Host           = proplists:get_value(host, Args, "127.0.0.1"),
+    Port           = proplists:get_value(port, Args, 6379),
+    Database       = proplists:get_value(database, Args, 0),
+    Password       = proplists:get_value(password, Args, ""),
+    ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
+    start_link(Host, Port, Database, Password, ReconnectSleep).
+
+
 -spec q(Client::pid(), Command::iolist()) ->
-               {ok, Value::binary()} | {error, Reason::binary()}.
+               {ok, return_value()} | {error, Reason::binary()}.
 %% @doc: Executes the given command in the specified connection. The
 %% command must be a valid Redis command and may contain arbitrary
 %% data which will be converted to binaries. The returned values will
@@ -100,4 +99,3 @@ to_binary(X) when is_binary(X)  -> X;
 to_binary(X) when is_integer(X) -> list_to_binary(integer_to_list(X));
 to_binary(X) when is_float(X)   -> throw({cannot_store_floats, X});
 to_binary(X)                    -> term_to_binary(X).
-

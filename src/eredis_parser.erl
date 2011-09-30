@@ -43,8 +43,8 @@ init() ->
 
 
 -spec parse(State::#pstate{}, Data::binary()) ->
-                   {ok, Value::binary(), NewState::#pstate{}} |
-                       {ok, Value::binary(), Rest::binary(), NewState::#pstate{}} |
+                   {ok, return_value(), NewState::#pstate{}} |
+                       {ok, return_value(), Rest::binary(), NewState::#pstate{}} |
                        {error, ErrString::binary(), NewState::#pstate{}} |
                        {error, ErrString::binary(), Rest::binary(), NewState::#pstate{}} |
                        {continue, NewState::#pstate{}}.
