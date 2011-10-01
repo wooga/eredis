@@ -25,7 +25,7 @@
 -include("eredis.hrl").
 
 %% API
--export([start_link/4, stop/1, select_database/2]).
+-export([start_link/4, start_link/5, stop/1, select_database/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -36,6 +36,7 @@
           port :: integer() | undefined,
           password :: binary() | undefined,
           database :: binary() | undefined,
+          reconnect_sleep :: integer() | undefined,
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
@@ -43,16 +44,20 @@
 }).
 
 -define(SOCKET_OPTS, [binary, {active, once}, {packet, raw}, {reuseaddr, true}]).
--define(RECONNECT_SLEEP, 100). %% Sleep between reconnect attempts, in milliseconds
 
 %%
 %% API
 %%
-
 -spec start_link(Host::list(), Port::integer(), Database::integer(),
                  Password::string()) -> {ok, Pid::pid()} | {error, Reason::term()}.
 start_link(Host, Port, Database, Password) ->
-    gen_server:start_link(?MODULE, [Host, Port, Database, Password], []).
+    start_link(Host, Port, Database, Password, 100).
+
+-spec start_link(Host::list(), Port::integer(), Database::integer(),
+                 Password::string(), ReconnectSleep::integer()) -> {ok, Pid::pid()} | {error, Reason::term()}.
+start_link(Host, Port, Database, Password, ReconnectSleep) ->
+    gen_server:start_link(?MODULE, [Host, Port, Database, Password, ReconnectSleep], []).
+
 
 stop(Pid) ->
     gen_server:call(Pid, stop).
@@ -61,11 +66,13 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Database, Password]) ->
+init([Host, Port, Database, Password, ReconnectSleep]) ->
     State = #state{host = Host,
                    port = Port,
                    database = list_to_binary(integer_to_list(Database)),
                    password = list_to_binary(Password),
+                   reconnect_sleep = ReconnectSleep,
+
                    parser_state = eredis_parser:init(),
                    queue = queue:new()},
 
@@ -111,6 +118,11 @@ handle_info({tcp_closed, _Socket}, State) ->
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
     {noreply, State#state{socket = Socket}};
+
+%% eredis can be used in Poolboy, but it requires to support a simple API
+%% that Poolboy uses to manage the connections.
+handle_info(stop, State) ->
+    {stop, shutdown, State};
 
 handle_info(_Info, State) ->
     {stop, {unhandled_message, _Info}, State}.
@@ -238,18 +250,18 @@ do_sync_command(Socket, Command) ->
 %% @doc: Loop until a connection can be established, this includes
 %% successfully issuing the auth and select calls. When we have a
 %% connection, give the socket to the redis client.
-reconnect_loop(Client, State) ->
+reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep}=State) ->
     case catch(connect(State)) of
         {ok, #state{socket = Socket}} ->
             gen_tcp:controlling_process(Socket, Client),
             Client ! {connection_ready, Socket};
         {error, _Reason} ->
-            timer:sleep(?RECONNECT_SLEEP),
+            timer:sleep(ReconnectSleep),
             reconnect_loop(Client, State);
         %% Something bad happened when connecting, like Redis might be
         %% loading the dataset and we got something other than 'OK' in
         %% auth or select
         _ ->
-            timer:sleep(?RECONNECT_SLEEP),
+            timer:sleep(ReconnectSleep),
             reconnect_loop(Client, State)
     end.

@@ -15,8 +15,8 @@
 %% Specified in http://www.erlang.org/doc/man/gen_server.html#call-3
 -define(TIMEOUT, 5000).
 
--export([start_link/0, start_link/2, start_link/3, start_link/4,
-         q/2, q/3]).
+-export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
+         start_link/5, q/2, q/3]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -24,6 +24,18 @@
 %%
 %% PUBLIC API
 %%
+
+%% -type Args = [Option].
+%% -type Option = {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, integer()}.
+-spec start_link( Args :: list() ) -> {ok, Pid::pid()} | {error, Reason::term()}.
+start_link(Args) ->
+    Host = proplists:get_value(host, Args, "127.0.0.1"),
+    Port = proplists:get_value(port, Args, 6379),
+    Database = proplists:get_value(database, Args, 0),
+    Password = proplists:get_value(password, Args, ""),
+    ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
+    eredis_client:start_link(Host, Port, Database, Password, ReconnectSleep).
+
 
 -spec start_link() -> {ok, Client::pid()} |
                           {error, {connection_error, Reason::any()}}.
@@ -36,12 +48,15 @@ start_link(Host, Port) ->
 start_link(Host, Port, Database) ->
     start_link(Host, Port, Database, "").
 
-start_link(Host, Port,  Database, Password) when is_list(Host);
-                                                 is_integer(Port);
-                                                 is_integer(Database);
-                                                 is_list(Password) ->
-    eredis_client:start_link(Host, Port, Database, Password).
+start_link(Host, Port,  Database, Password) ->
+    start_link(Host, Port, Database, Password, 100).    
 
+start_link(Host, Port, Database, Password, ReconnectSleep) when is_list(Host);
+                                                                is_integer(Port);
+                                                                is_integer(Database);
+                                                                is_list(Password);
+                                                                is_integer(ReconnectSleep)->
+    eredis_client:start_link(Host, Port, Database, Password, ReconnectSleep).
 
 -spec q(Client::pid(), Command::iolist()) ->
                {ok, Value::binary()} | {error, Reason::binary()}.
