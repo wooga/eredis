@@ -13,6 +13,27 @@
                         parse_multibulk/1, parse_multibulk/2]).
 
 
+% parse a binary one byte at a time
+one_byte_parse(B) ->
+    one_byte_parse(init(), B).
+
+one_byte_parse(S, <<>>) ->
+    parse(S, <<>>);
+one_byte_parse(S, <<Byte>>) ->
+    parse(S, <<Byte>>);
+one_byte_parse(S, <<Byte, B/binary>>) ->
+    case parse(S, <<Byte>>) of
+        {continue, NewState} ->
+            one_byte_parse(NewState, B);
+        {ok, Value, Rest, NewState} ->
+            {ok, Value, <<Rest/binary, B/binary>>, NewState};
+        {error, Err, Rest, NewState} ->
+            {error, Err, <<Rest/binary, B/binary>>, NewState};
+        Other ->
+            Other
+    end.
+
+
 parse_bulk_test() ->
     B = <<"$3\r\nbar\r\n">>,
     ?assertEqual({ok, <<"bar">>, #pstate{}}, parse(#pstate{}, B)).
@@ -134,6 +155,30 @@ multibulk_parse_test() ->
     %% [{1, 1}, {2, 2}, {3, 3}]
     B = <<"*3\r\n$1\r\n1\r\n$1\r\n2\r\n$1\r\n3\r\n">>,
     ?assertEqual({ok, [<<"1">>, <<"2">>, <<"3">>], #pstate{}}, parse(init(), B)).
+
+multibulk_one_byte_parse_test() ->
+    %% [{1, 1}, {2, 2}, {3, 3}]
+    B = <<"*3\r\n$1\r\n1\r\n$1\r\n2\r\n$1\r\n3\r\n">>,
+    ?assertEqual({ok, [<<"1">>, <<"2">>, <<"3">>], #pstate{}},
+                 one_byte_parse(B)).
+
+nested_multibulk_test() ->
+    %% [[1, 2], [3, 4]]
+    B = <<"*2\r\n*2\r\n$1\r\n1\r\n$1\r\n2\r\n*2\r\n$1\r\n3\r\n$1\r\n4\r\n">>,
+    ?assertEqual({ok, [[<<"1">>, <<"2">>], [<<"3">>, <<"4">>]], <<>>},
+                 parse_multibulk(B)).
+
+nested_multibulk_parse_test() ->
+    %% [[1, 2], [3, 4]]
+    B = <<"*2\r\n*2\r\n$1\r\n1\r\n$1\r\n2\r\n*2\r\n$1\r\n3\r\n$1\r\n4\r\n">>,
+    ?assertEqual({ok, [[<<"1">>, <<"2">>], [<<"3">>, <<"4">>]], #pstate{}},
+                 parse(init(), B)).
+
+nested_multibulk_one_byte_parse_test() ->
+    %% [[1, 2], [3, 4]]
+    B = <<"*2\r\n*2\r\n$1\r\n1\r\n$1\r\n2\r\n*2\r\n$1\r\n3\r\n$1\r\n4\r\n">>,
+    ?assertEqual({ok, [[<<"1">>, <<"2">>], [<<"3">>, <<"4">>]], #pstate{}},
+                 one_byte_parse(B)).
 
 multibulk_split_parse_test() ->
     %% [{1, 1}, {2, 2}, {3, 3}]

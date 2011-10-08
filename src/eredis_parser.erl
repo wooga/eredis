@@ -171,6 +171,7 @@ do_parse_multibulk(Count, Data, Acc) ->
 %% BULK
 %%
 
+parse_bulk(<<$*, _Rest/binary>> = Data) -> parse_multibulk(Data);
 parse_bulk(<<$+, Data/binary>>) -> parse_simple(Data);
 parse_bulk(<<$-, Data/binary>>) -> parse_simple(Data);
 parse_bulk(<<$:, Data/binary>>) -> parse_simple(Data);
