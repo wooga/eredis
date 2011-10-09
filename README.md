@@ -1,6 +1,9 @@
 # eredis
 
-Redis client with a focus on performance and robustness. Eredis also supports AUTH, SELECT and poolboy.
+Non-blocking Redis client with a focus on performance and robustness.
+
+It also supports authentication, choosing a specific database,
+transactions and poolboy.
 
 ## Example
 
