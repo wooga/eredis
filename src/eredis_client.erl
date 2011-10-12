@@ -208,7 +208,9 @@ handle_response(Data, #state{parser_state = ParserState,
     end.
 
 %% @doc: Sends a value to the first client in queue. Returns the new
-%% queue without this client.
+%% queue without this client. If we are still waiting for parts of a
+%% pipelined request, push the reply to the the head of the queue and
+%% wait for another reply from redis.
 reply(Value, Queue) ->
     case queue:out(Queue) of
         {{value, {1, From}}, NewQueue} ->
@@ -218,7 +220,7 @@ reply(Value, Queue) ->
             gen_server:reply(From, lists:reverse([Value | Replies])),
             NewQueue;
         {{value, {N, From, Replies}}, NewQueue} when N > 1 ->
-            queue:in({N - 1, From, [Value | Replies]}, NewQueue);
+            queue:in_r({N - 1, From, [Value | Replies]}, NewQueue);
         {empty, Queue} ->
             %% Oops
             error_logger:info_msg("Nothing in queue, but got value from parser~n"),

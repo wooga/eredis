@@ -58,7 +58,7 @@ start_link(Args) ->
 
 
 -spec q(Client::pid(), Command::iolist()) ->
-               {ok, return_value()} | {error, Reason::binary()}.
+               {ok, return_value()} | {error, Reason::binary() | no_connection}.
 %% @doc: Executes the given command in the specified connection. The
 %% command must be a valid Redis command and may contain arbitrary
 %% data which will be converted to binaries. The returned values will
@@ -71,7 +71,8 @@ q(Client, Command, Timeout) ->
 
 
 -spec qp(Client::pid(), Pipeline::pipeline()) ->
-                {ok, return_value()} | {error, Reason::binary()}.
+                [{ok, return_value()} | {error, Reason::binary()}] |
+                {error, no_connection}.
 %% @doc: Executes the given pipeline (list of commands) in the
 %% specified connection. The commands must be valid Redis commands and
 %% may contain arbitrary data which will be converted to binaries. The

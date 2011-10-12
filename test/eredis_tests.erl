@@ -75,6 +75,21 @@ pipeline_test() ->
 
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", a, b])).
 
+pipeline_mixed_test() ->
+    C = c(),
+    P1 = [["LPUSH", c, "1"] || _ <- lists:seq(1, 100)],
+    P2 = [["LPUSH", d, "1"] || _ <- lists:seq(1, 100)],
+    Expect = [{ok, list_to_binary(integer_to_list(I))} || I <- lists:seq(1, 100)],
+    spawn(fun () ->
+                  erlang:yield(),
+                  ?assertEqual(Expect, eredis:qp(C, P1))
+          end),
+    spawn(fun () ->
+                  ?assertEqual(Expect, eredis:qp(C, P2))
+          end),
+    timer:sleep(10),
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL", c, d])).
+
 
 c() ->
     Res = eredis:start_link(),
