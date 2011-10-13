@@ -52,6 +52,30 @@ exec_test() ->
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", "k1", "k2"])).
 
 
+pipeline_test() ->
+    C = c(),
+
+    P1 = [["SET", a, "1"],
+          ["LPUSH", b, "3"],
+          ["LPUSH", b, "2"]],
+
+    ?assertEqual([{ok, <<"OK">>}, {ok, <<"1">>}, {ok, <<"2">>}],
+                 eredis:qp(C, P1)),
+
+    P2 = [["MULTI"],
+          ["GET", a],
+          ["LRANGE", b, "0", "-1"],
+          ["EXEC"]],
+
+    ?assertEqual([{ok, <<"OK">>},
+                  {ok, <<"QUEUED">>},
+                  {ok, <<"QUEUED">>},
+                  {ok, [<<"1">>, [<<"2">>, <<"3">>]]}],
+                 eredis:qp(C, P2)),
+
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL", a, b])).
+
+
 c() ->
     Res = eredis:start_link(),
     ?assertMatch({ok, _}, Res),

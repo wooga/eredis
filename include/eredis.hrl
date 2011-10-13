@@ -5,6 +5,7 @@
 
 -type return_value() :: binary() | [binary()].
 
+-type pipeline() :: [iolist()].
 
 %% Continuation data is whatever data returned by any of the parse
 %% functions. This is used to continue where we left off the next time

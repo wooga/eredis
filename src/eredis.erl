@@ -16,7 +16,7 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, q/2, q/3]).
+         start_link/5, q/2, q/3, qp/2, qp/3]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -70,12 +70,31 @@ q(Client, Command, Timeout) ->
     call(Client, Command, Timeout).
 
 
+-spec qp(Client::pid(), Pipeline::pipeline()) ->
+                {ok, return_value()} | {error, Reason::binary()}.
+%% @doc: Executes the given pipeline (list of commands) in the
+%% specified connection. The commands must be valid Redis commands and
+%% may contain arbitrary data which will be converted to binaries. The
+%% values returned by each command in the pipeline are returned in a list.
+qp(Client, Pipeline) ->
+    pipeline(Client, Pipeline, ?TIMEOUT).
+
+qp(Client, Pipeline, Timeout) ->
+    pipeline(Client, Pipeline, Timeout).
+
+
 %%
 %% INTERNAL HELPERS
 %%
 
 call(Client, Command, Timeout) ->
     Request = {request, create_multibulk(Command)},
+    gen_server:call(Client, Request, Timeout).
+
+pipeline(_Client, [], _Timeout) ->
+    [];
+pipeline(Client, Pipeline, Timeout) ->
+    Request = {pipeline, [create_multibulk(Command) || Command <- Pipeline]},
     gen_server:call(Client, Request, Timeout).
 
 -spec create_multibulk(Args::iolist()) -> Command::iolist().
