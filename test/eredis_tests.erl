@@ -51,6 +51,16 @@ exec_test() ->
 
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", "k1", "k2"])).
 
+exec_nil_test() ->
+    C1 = c(),
+    C2 = c(),
+
+    ?assertEqual({ok, <<"OK">>}, eredis:q(C1, ["WATCH", "x"])),
+    ?assertMatch({ok, _}, eredis:q(C2, ["INCR", "x"])),
+    ?assertEqual({ok, <<"OK">>}, eredis:q(C1, ["MULTI"])),
+    ?assertEqual({ok, <<"QUEUED">>}, eredis:q(C1, ["GET", "x"])),
+    ?assertEqual({ok, undefined}, eredis:q(C1, ["EXEC"])),
+    ?assertMatch({ok, _}, eredis:q(C1, ["DEL", "x"])).
 
 pipeline_test() ->
     C = c(),
