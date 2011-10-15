@@ -149,6 +149,8 @@ parse_multibulk({in_parsing_bulks, Count, OldData, Acc},
 do_parse_multibulk(Count, Data) ->
     do_parse_multibulk(Count, Data, []).
 
+do_parse_multibulk(-1, Data, []) ->
+    {ok, undefined, Data};
 do_parse_multibulk(0, Data, Acc) ->
     {ok, lists:reverse(Acc), Data};
 do_parse_multibulk(Count, <<>>, Acc) ->
