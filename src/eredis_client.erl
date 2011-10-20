@@ -87,7 +87,7 @@ handle_call({request, Req}, From, State) ->
     do_request(Req, From, State);
 
 handle_call(stop, _From, State) ->
-    {stop, normal, State};
+    {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
     {reply, unknown_request, State}.
