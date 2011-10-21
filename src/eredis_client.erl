@@ -16,6 +16,9 @@
 %%    the client at the front of the queue. If the parser does not have
 %%    enough data to parse the complete response, we will wait for more
 %%    data to arrive.
+%%  * For pipeline commands, we include the number of responses we are
+%%    waiting for in each element of the queue. Responses are queued until
+%%    we have all the responses we need and then reply with all of them.
 %%
 -module(eredis_client).
 -author('knut.nesheim@wooga.com').
@@ -86,6 +89,9 @@ init([Host, Port, Database, Password, ReconnectSleep]) ->
 handle_call({request, Req}, From, State) ->
     do_request(Req, From, State);
 
+handle_call({pipeline, Pipeline}, From, State) ->
+    do_pipeline(Pipeline, From, State);
+
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
@@ -151,7 +157,23 @@ do_request(_Req, _From, #state{socket = undefined} = State) ->
 do_request(Req, From, State) ->
     case gen_tcp:send(State#state.socket, Req) of
         ok ->
-            NewQueue = queue:in(From, State#state.queue),
+            NewQueue = queue:in({1, From}, State#state.queue),
+            {noreply, State#state{queue = NewQueue}};
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
+    end.
+
+-spec do_pipeline(Pipeline::pipeline(), From::pid(), #state{}) ->
+                         {noreply, #state{}} | {reply, Reply::any(), #state{}}.
+%% @doc: Sends the entire pipeline to redis. If we do not have a
+%% connection, returns error.
+do_pipeline(_Pipeline, _From, #state{socket = undefined} = State) ->
+    {reply, {error, no_connection}, State};
+
+do_pipeline(Pipeline, From, State) ->
+    case gen_tcp:send(State#state.socket, Pipeline) of
+        ok ->
+            NewQueue = queue:in({length(Pipeline), From, []}, State#state.queue),
             {noreply, State#state{queue = NewQueue}};
         {error, Reason} ->
             {reply, {error, Reason}, State}
@@ -186,12 +208,19 @@ handle_response(Data, #state{parser_state = ParserState,
     end.
 
 %% @doc: Sends a value to the first client in queue. Returns the new
-%% queue without this client.
+%% queue without this client. If we are still waiting for parts of a
+%% pipelined request, push the reply to the the head of the queue and
+%% wait for another reply from redis.
 reply(Value, Queue) ->
     case queue:out(Queue) of
-        {{value, From}, NewQueue} ->
+        {{value, {1, From}}, NewQueue} ->
             gen_server:reply(From, Value),
             NewQueue;
+        {{value, {1, From, Replies}}, NewQueue} ->
+            gen_server:reply(From, lists:reverse([Value | Replies])),
+            NewQueue;
+        {{value, {N, From, Replies}}, NewQueue} when N > 1 ->
+            queue:in_r({N - 1, From, [Value | Replies]}, NewQueue);
         {empty, Queue} ->
             %% Oops
             error_logger:info_msg("Nothing in queue, but got value from parser~n"),
