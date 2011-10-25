@@ -16,7 +16,7 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, q/2, q/3]).
+         start_link/5, q/2, q/3, close/1]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -69,6 +69,8 @@ q(Client, Command) ->
 q(Client, Command, Timeout) ->
     call(Client, Command, Timeout).
 
+close(Client) ->
+	eredis_client:stop(Client).
 
 %%
 %% INTERNAL HELPERS
