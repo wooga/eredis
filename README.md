@@ -17,6 +17,7 @@ copy and paste the following into a shell to try out Eredis:
     {ok, C} = eredis:start_link().
     {ok, <<"OK">>} = eredis:q(C, ["SET", "foo", "bar"]).
     {ok, <<"bar">>} = eredis:q(C, ["GET", "foo"]).
+    eredis:close(C).
 
 MSET and MGET:
 
