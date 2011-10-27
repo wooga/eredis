@@ -31,6 +31,24 @@ run(get, KeyGen, _ValueGen, Client) ->
             {error, timeout, Client}
     end;
 
+run(pipeline_get, KeyGen, _ValueGen, Client) ->
+    Seq = lists:seq(1, 5),
+    P = [["GET", KeyGen()] || _ <- Seq],
+
+    case catch(eredis:qp(Client, P, 500)) of
+        {error, Reason} ->
+            {error, Reason, Client};
+        {'EXIT', {timeout, _}} ->
+            {error, timeout, Client};
+        Res ->
+            case check_pipeline_get(Res, Seq) of
+                ok ->
+                    {ok, Client};
+                {error, Reason} ->
+                    {error, Reason, Client}
+            end
+    end;
+
 run(put, KeyGen, ValueGen, Client) ->
     case catch(eredis:q(Client, ["SET", KeyGen(), ValueGen()], 100)) of
         {ok, <<"OK">>} ->
@@ -39,7 +57,30 @@ run(put, KeyGen, ValueGen, Client) ->
             {error, Reason, Client};
         {'EXIT', {timeout, _}} ->
             {error, timeout, Client}
+    end;
+
+run(pipeline_put, KeyGen, ValueGen, Client) ->
+    Seq = lists:seq(1, 5),
+    P = [["SET", KeyGen(), ValueGen()] || _ <- Seq],
+    R = [{ok, <<"OK">>} || _ <- Seq],
+
+    case catch(eredis:qp(Client, P, 500)) of
+        R ->
+            {ok, Client};
+        {error, Reason} ->
+            {error, Reason, Client};
+        {'EXIT', {timeout, _}} ->
+            {error, timeout, Client}
     end.
+
+
+check_pipeline_get([], []) ->
+    ok;
+check_pipeline_get([{ok, _}|Res], [_|Seq]) ->
+    check_pipeline_get(Res, Seq);
+check_pipeline_get([{error, Reason}], _) ->
+    {error, Reason}.
+
 
 value_gen(_Id) ->
     fun() ->

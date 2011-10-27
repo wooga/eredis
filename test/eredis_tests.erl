@@ -52,6 +52,45 @@ exec_test() ->
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", "k1", "k2"])).
 
 
+pipeline_test() ->
+    C = c(),
+
+    P1 = [["SET", a, "1"],
+          ["LPUSH", b, "3"],
+          ["LPUSH", b, "2"]],
+
+    ?assertEqual([{ok, <<"OK">>}, {ok, <<"1">>}, {ok, <<"2">>}],
+                 eredis:qp(C, P1)),
+
+    P2 = [["MULTI"],
+          ["GET", a],
+          ["LRANGE", b, "0", "-1"],
+          ["EXEC"]],
+
+    ?assertEqual([{ok, <<"OK">>},
+                  {ok, <<"QUEUED">>},
+                  {ok, <<"QUEUED">>},
+                  {ok, [<<"1">>, [<<"2">>, <<"3">>]]}],
+                 eredis:qp(C, P2)),
+
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL", a, b])).
+
+pipeline_mixed_test() ->
+    C = c(),
+    P1 = [["LPUSH", c, "1"] || _ <- lists:seq(1, 100)],
+    P2 = [["LPUSH", d, "1"] || _ <- lists:seq(1, 100)],
+    Expect = [{ok, list_to_binary(integer_to_list(I))} || I <- lists:seq(1, 100)],
+    spawn(fun () ->
+                  erlang:yield(),
+                  ?assertEqual(Expect, eredis:qp(C, P1))
+          end),
+    spawn(fun () ->
+                  ?assertEqual(Expect, eredis:qp(C, P2))
+          end),
+    timer:sleep(10),
+    ?assertMatch({ok, _}, eredis:q(C, ["DEL", c, d])).
+
+
 c() ->
     Res = eredis:start_link(),
     ?assertMatch({ok, _}, Res),
