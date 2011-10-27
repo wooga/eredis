@@ -2,8 +2,8 @@
 
 Non-blocking Redis client with a focus on performance and robustness.
 
-It also supports authentication, choosing a specific database,
-transactions and poolboy.
+It supports authentication, choosing a specific database, transactions
+and pipelining.
 
 ## Example
 
@@ -24,6 +24,19 @@ MSET and MGET:
     {ok, <<"OK">>} = eredis:q(C, ["MSET" | KeyValuePairs]).
     {ok, Values} = eredis:q(C, ["MGET" | ["key1", "key2", "key3"]]).
 
+Transactions:
+
+    {ok, <<"OK">>} = eredis:q(C, ["MULTI"]).
+    {ok, <<"QUEUED">>} = eredis:q(C, ["SET", "foo", "bar"]).
+    {ok, <<"QUEUED">>} = eredis:q(C, ["SET", "bar", "baz"]).
+    {ok, [<<"OK">>, <<"OK">>]} = eredis:q(C, ["EXEC"]).
+
+Pipelining:
+    P1 = [["SET", a, "1"],
+          ["LPUSH", b, "3"],
+          ["LPUSH", b, "2"]].
+    [{ok, <<"OK">>}, {ok, <<"1">>}, {ok, <<"2">>}] = eredis:qp(C, P1).
+
 EUnit tests:
 
     ./rebar eunit
@@ -31,13 +44,19 @@ EUnit tests:
 
 ## Commands
 
-Eredis has only one function to interact with redis, which is
+Eredis has one main function to interact with redis, which is
 `eredis:q(Client::pid(), Command::iolist())`. The response will either
 be `{ok, Value::binary() | [binary()]}` or `{error,
-Message::binary()}`. The value is always the exact value returned by
+Message::binary()}`.  The value is always the exact value returned by
 Redis, without any type conversion. If Redis returns a list of values,
 this list is returned in the exact same order without any type
 conversion.
+
+To send multiple requests to redis in a batch, aka. pipelining
+requests, you may use `eredis:qp(Client::pid(),
+[Command::iolist()])`. This function returns `{ok, [Value::binary()]}`
+where the values are the redis responses in the same order as the
+commands you provided.
 
 To start the client, use any of the `eredis:start_link/0,1,2,3,4,5`
 functions. They all include sensible defaults. `start_link/5` takes
