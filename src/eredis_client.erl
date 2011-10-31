@@ -7,7 +7,7 @@
 %%
 %% The client works like this:
 %%  * When starting up, we connect to Redis with the given connection
-%%     information, or fail.
+%%    information, or fail.
 %%  * Users calls us using gen_server:call, we send the request to Redis,
 %%    add the calling process at the end of the queue and reply with
 %%    noreply. We are then free to handle new requests and may reply to
@@ -19,13 +19,15 @@
 %%  * For pipeline commands, we include the number of responses we are
 %%    waiting for in each element of the queue. Responses are queued until
 %%    we have all the responses we need and then reply with all of them.
+%%  * Redis pubsub messages are handled by sending Erlang messages to
+%%    all registered subscribers.
 %%
 -module(eredis_client).
 -author('knut.nesheim@wooga.com').
 
 -behaviour(gen_server).
 
--include("eredis.hrl").
+-include("eredis_priv.hrl").
 
 %% API
 -export([start_link/5, stop/1, select_database/2]).
@@ -33,18 +35,6 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-
--record(state, {
-          host :: string() | undefined,
-          port :: integer() | undefined,
-          password :: binary() | undefined,
-          database :: binary() | undefined,
-          reconnect_sleep :: integer() | undefined,
-
-          socket :: port() | undefined,
-          parser_state :: #pstate{} | undefined,
-          queue :: queue() | undefined
-}).
 
 -define(SOCKET_OPTS, [binary, {active, once}, {packet, raw}, {reuseaddr, true}]).
 
@@ -77,7 +67,8 @@ init([Host, Port, Database, Password, ReconnectSleep]) ->
                    reconnect_sleep = ReconnectSleep,
 
                    parser_state = eredis_parser:init(),
-                   queue = queue:new()},
+                   queue = queue:new(),
+                   subscribers = []},
 
     case connect(State) of
         {ok, NewState} ->
@@ -91,6 +82,9 @@ handle_call({request, Req}, From, State) ->
 
 handle_call({pipeline, Pipeline}, From, State) ->
     do_pipeline(Pipeline, From, State);
+
+handle_call({add_subscriber, Subscriber}, _From, State) ->
+    do_add_subscriber(Subscriber, State);
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
@@ -124,6 +118,11 @@ handle_info({tcp_closed, _Socket}, State) ->
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
     {noreply, State#state{socket = Socket}};
+
+%% One of our subscriber processes is down. Remove it from our list.
+handle_info({'DOWN', Ref, process, _Process, _Reason}, State) ->
+    Subscribers = proplists:delete(Ref, State#state.subscribers),
+    {noreply, State#state{subscribers=Subscribers}};
 
 %% eredis can be used in Poolboy, but it requires to support a simple API
 %% that Poolboy uses to manage the connections.
@@ -179,24 +178,31 @@ do_pipeline(Pipeline, From, State) ->
             {reply, {error, Reason}, State}
     end.
 
+-spec do_add_subscriber(Subscriber::pid(), #state{}) -> {reply, Reply::{ok, reference()}, #state{}}.
+do_add_subscriber(Subscriber, State) ->
+    Ref = erlang:monitor(process, Subscriber),
+    Subscribers = [{Ref, Subscriber} | State#state.subscribers],
+    {reply, {ok, Ref}, State#state{subscribers=Subscribers}}.
+
 -spec handle_response(Data::binary(), State::#state{}) -> NewState::#state{}.
 %% @doc: Handle the response coming from Redis. This includes parsing
 %% and replying to the correct client, handling partial responses,
 %% handling too much data and handling continuations.
 handle_response(Data, #state{parser_state = ParserState,
-                             queue = Queue} = State) ->
+                             queue = Queue,
+                             subscribers = Subscribers} = State) ->
 
     case eredis_parser:parse(ParserState, Data) of
         %% Got complete response, return value to client
         {ReturnCode, Value, NewParserState} ->
-            NewQueue = reply({ReturnCode, Value}, Queue),
+            NewQueue = reply({ReturnCode, Value}, Queue, Subscribers),
             State#state{parser_state = NewParserState,
                         queue = NewQueue};
 
         %% Got complete response, with extra data, reply to client and
         %% recurse over the extra data
         {ReturnCode, Value, Rest, NewParserState} ->
-            NewQueue = reply({ReturnCode, Value}, Queue),
+            NewQueue = reply({ReturnCode, Value}, Queue, Subscribers),
             handle_response(Rest, State#state{parser_state = NewParserState,
                                               queue = NewQueue});
 
@@ -210,8 +216,13 @@ handle_response(Data, #state{parser_state = ParserState,
 %% @doc: Sends a value to the first client in queue. Returns the new
 %% queue without this client. If we are still waiting for parts of a
 %% pipelined request, push the reply to the the head of the queue and
-%% wait for another reply from redis.
-reply(Value, Queue) ->
+%% wait for another reply from redis. Pubsub messages are not part of
+%% the normal reply stream and will instead be sent as Erlang messages
+%% to the list of subscribers.
+reply({ok, [<<"message">>, Channel, Message]}, Queue, Subscribers) ->
+    [Pid ! {message, Channel, Message, Ref} || {Ref, Pid} <- Subscribers],
+    Queue;
+reply(Value, Queue, _Subscribers) ->
     case queue:out(Queue) of
         {{value, {1, From}}, NewQueue} ->
             gen_server:reply(From, Value),
@@ -279,10 +290,13 @@ do_sync_command(Socket, Command) ->
 %% @doc: Loop until a connection can be established, this includes
 %% successfully issuing the auth and select calls. When we have a
 %% connection, give the socket to the redis client.
-reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep}=State) ->
+reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep,
+                             subscribers=Subscribers}=State) ->
+    [Pid ! {eredis_disconnected, Ref} || {Ref, Pid} <- Subscribers],
     case catch(connect(State)) of
         {ok, #state{socket = Socket}} ->
             gen_tcp:controlling_process(Socket, Client),
+            [Pid ! {eredis_connected, Ref} || {Ref, Pid} <- Subscribers],
             Client ! {connection_ready, Socket};
         {error, _Reason} ->
             timer:sleep(ReconnectSleep),

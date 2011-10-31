@@ -2,8 +2,8 @@
 
 Non-blocking Redis client with a focus on performance and robustness.
 
-It supports authentication, choosing a specific database, transactions
-and pipelining.
+It supports authentication, choosing a specific database, transactions,
+pipelining, and pubsub.
 
 ## Example
 
