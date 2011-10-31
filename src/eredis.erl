@@ -16,7 +16,9 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, q/2, q/3, qp/2, qp/3]).
+         start_link/5, q/2, q/3, qp/2, qp/3,
+         controlling_process/1, controlling_process/2, controlling_process/3,
+         ack_message/1]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -82,6 +84,54 @@ qp(Client, Pipeline) ->
 
 qp(Client, Pipeline, Timeout) ->
     pipeline(Client, Pipeline, Timeout).
+
+
+-spec controlling_process(Client::pid()) -> ok.
+%% @doc: Make the calling process the controlling process. The
+%% controlling process received pubsub-related messages, of which
+%% there are three kinds. In each message, the pid refers to the
+%% eredis client process.
+%%
+%%   {message, Channel::binary(), Message::binary(), pid()}
+%%     This is sent for each pubsub message received by the client.
+%%
+%%   {eredis_disconnected, pid()}
+%%     This is sent when the eredis client is disconnected from redis.
+%%
+%%   {eredis_connected, pid()}
+%%     This is sent when the eredis client reconnects to redis after
+%%     an existing connection was disconnected.
+%%
+%% Note that you must still issue SUBSCRIBE or PSUBSCRIBE redis
+%% commands to receive pubsub messages. Also, once you issue a
+%% SUBSCRIBE or PSUBSCRIBE command, that eredis client may only be
+%% used to add or remove pubsub subscriptions and to receive pubsub
+%% messages. That is how Redis pubsub works, it is not an artifact
+%% of eredis.
+%%
+%% Any message of the form {message, _, _, _} must be acknowledged
+%% before any subsequent message of the same form is sent. This
+%% prevents the controlling process from being overrun with redis
+%% pubsub messages. See ack_message/2 below.
+controlling_process(Client) ->
+    controlling_process(Client, self()).
+
+-spec controlling_process(Client::pid(), Pid::pid()) -> ok.
+%% @doc: Make the given process (pid) the controlling process.
+controlling_process(Client, Pid) ->
+    controlling_process(Client, Pid, ?TIMEOUT).
+
+%% @doc: Make the given process (pid) the controlling process subscriber
+%% with the given Timeout.
+controlling_process(Client, Pid, Timeout) ->
+    gen_server:call(Client, {controlling_process, Pid}, Timeout).
+
+
+-spec ack_message(Client::pid()) -> ok.
+%% @doc: acknowledge the receipt of a pubsub message. each pubsub
+%% message must be acknowledged before the next one is received
+ack_message(Client) ->
+    gen_server:cast(Client, {ack_message, self()}).
 
 
 %%
