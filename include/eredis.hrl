@@ -7,6 +7,8 @@
 
 -type pipeline() :: [iolist()].
 
+-type channel() :: binary().
+
 %% Continuation data is whatever data returned by any of the parse
 %% functions. This is used to continue where we left off the next time
 %% the user calls parse/2.
@@ -21,3 +23,5 @@
 }).
 
 -define(NL, "\r\n").
+
+-define(SOCKET_OPTS, [binary, {active, once}, {packet, raw}, {reuseaddr, true}]).
