@@ -17,7 +17,7 @@
 
 
 %% API
--export([start_link/5, stop/1]).
+-export([start_link/7, stop/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -31,10 +31,12 @@
                  Port::integer(),
                  Password::string(),
                  Channels::[channel()],
-                 ReconnectSleep::integer()) ->
+                 ReconnectSleep::integer(),
+                 MaxQueueSize::integer(),
+                 QueueBehaviour::drop | exit) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Host, Port, Password, Channels, ReconnectSleep) ->
-    Args = [Host, Port, Password, Channels, ReconnectSleep],
+start_link(Host, Port, Password, Channels, ReconnectSleep, MaxQueueSize, QueueBehaviour) ->
+    Args = [Host, Port, Password, Channels, ReconnectSleep, MaxQueueSize, QueueBehaviour],
     gen_server:start_link(?MODULE, Args, []).
 
 
@@ -45,14 +47,16 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Password, Channels, ReconnectSleep]) ->
-    State = #state{host = Host,
-                   port = Port,
-                   password = list_to_binary(Password),
+init([Host, Port, Password, Channels, ReconnectSleep, MaxQueueSize, QueueBehaviour]) ->
+    State = #state{host            = Host,
+                   port            = Port,
+                   password        = list_to_binary(Password),
                    reconnect_sleep = ReconnectSleep,
-                   channels = Channels,
-                   parser_state = eredis_parser:init(),
-                   msg_queue = queue:new()},
+                   channels        = Channels,
+                   parser_state    = eredis_parser:init(),
+                   msg_queue       = queue:new(),
+                   max_queue_size  = MaxQueueSize,
+                   queue_behaviour = QueueBehaviour},
 
     case connect(State) of
         {ok, NewState} ->
@@ -71,7 +75,7 @@ handle_call({controlling_process, Pid}, _From, State) ->
             erlang:demonitor(OldRef)
     end,
     Ref = erlang:monitor(process, Pid),
-    {reply, ok, State#state{controlling_process={Ref, Pid}}};
+    {reply, ok, State#state{controlling_process={Ref, Pid}, msg_state = ready}};
 
 
 handle_call(stop, _From, State) ->
@@ -79,6 +83,14 @@ handle_call(stop, _From, State) ->
 
 handle_call(_Request, _From, State) ->
     {reply, unknown_request, State}.
+
+
+%% Controlling process acks, but we have no connection. When the
+%% connection comes back up, we should be ready to forward a message
+%% again.
+handle_cast({ack_message, Pid},
+            #state{controlling_process={_, Pid}, socket = undefined} = State) ->
+    {noreply, State#state{msg_state = ready}};
 
 %% Controlling process acknowledges receipt of previous message. Send
 %% the next if there is any messages queued or ask for more on the
@@ -88,7 +100,6 @@ handle_cast({ack_message, Pid},
 
     NewState = case queue:out(State#state.msg_queue) of
                    {empty, _Queue} ->
-                       inet:setopts(State#state.socket, [{active, once}]),
                        State#state{msg_state = ready};
                    {{value, Msg}, Queue} ->
                        send_to_controller(Msg, State),
@@ -105,7 +116,21 @@ handle_cast(_Msg, State) ->
 
 %% Receive data from socket, see handle_response/2
 handle_info({tcp, _Socket, Bs}, State) ->
-    {noreply, handle_response(Bs, State)};
+    inet:setopts(State#state.socket, [{active, once}]),
+    NewState = handle_response(Bs, State),
+    case queue:len(NewState#state.msg_queue) > NewState#state.max_queue_size of
+        true ->
+            case State#state.queue_behaviour of
+                drop ->
+                    Msg = {dropped, queue:len(NewState#state.msg_queue)},
+                    send_to_controller(Msg, NewState),
+                    {noreply, NewState#state{msg_queue = queue:new()}};
+                exit ->
+                    {stop, max_queue_size, State}
+            end;
+        false ->
+            {noreply, NewState}
+    end;
 
 %% Socket got closed, for example by Redis terminating idle
 %% clients. Spawn of a new process which will try to reconnect and
@@ -116,10 +141,9 @@ handle_info({tcp_closed, _Socket}, State) ->
     send_to_controller({eredis_disconnected, Self}, State),
     spawn(fun() -> reconnect_loop(Self, State) end),
 
-    %% Throw away the socket and the queue, as we will never get a
-    %% response to the requests sent on the old socket. The absence of
-    %% a socket is used to signal we are "down"
-    {noreply, State#state{socket = undefined, queue = queue:new()}};
+    %% Throw away the socket. The absence of a socket is used to
+    %% signal we are "down"
+    {noreply, State#state{socket = undefined}};
 
 %% Redis is ready to accept requests, the given Socket is a socket
 %% already connected and authenticated.
@@ -164,19 +188,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% and serve them up when the controlling process is ready
 handle_response(Data, #state{parser_state = ParserState} = State) ->
     case eredis_parser:parse(ParserState, Data) of
-        %% Channel message
         {ReturnCode, Value, NewParserState} ->
             reply({ReturnCode, Value},
                   State#state{parser_state=NewParserState});
 
         {ReturnCode, Value, Rest, NewParserState} ->
-            error_logger:info_msg("too much!~n"),
             NewState = reply({ReturnCode, Value},
                              State#state{parser_state=NewParserState}),
             handle_response(Rest, NewState);
 
         {continue, NewParserState} ->
-            error_logger:info_msg("cont~n"),
             inet:setopts(State#state.socket, [{active, once}]),
             State#state{parser_state = NewParserState}
     end.
@@ -187,11 +208,8 @@ handle_response(Data, #state{parser_state = ParserState} = State) ->
 reply({ok, [<<"message">>, Channel, Message]}, State) ->
     Msg = {message, Channel, Message, self()},
 
-    %% Crash if there is no controlling process?
-
     case State#state.msg_state of
         need_ack ->
-            error_logger:info_msg("queuing~n"),
             MsgQueue = queue:in(Msg, State#state.msg_queue),
             State#state{msg_queue = MsgQueue};
         ready ->
@@ -296,4 +314,5 @@ reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep}=State) ->
 send_to_controller(_Msg, #state{controlling_process=undefined}) ->
     ok;
 send_to_controller(Msg, #state{controlling_process={_Ref, Pid}}) ->
+    %%error_logger:info_msg("~p ! ~p~n", [Pid, Msg]),
     Pid ! Msg.

@@ -19,24 +19,25 @@ s(Channels) ->
     C.
 
 
-%% pubsub_test() ->
-%%     Pub = c(),
-%%     Sub = s([<<"chan1">>, <<"chan2">>]),
-%%     ok = eredis_sub:controlling_process(Sub),
-%%     ?assertEqual({ok, <<"1">>}, eredis:q(Pub, ["PUBLISH", chan1, msg])),
-%%     receive
-%%         {message, _, _, _} = M ->
-%%             ?assertEqual({message, <<"chan1">>, <<"msg">>, Sub}, M)
-%%     after 10 ->
-%%             throw(timeout)
-%%     end,
+pubsub_test() ->
+    Pub = c(),
+    Sub = s([<<"chan1">>, <<"chan2">>]),
+    ok = eredis_sub:controlling_process(Sub),
+    ?assertEqual({ok, <<"1">>}, eredis:q(Pub, ["PUBLISH", chan1, msg])),
+    receive
+        {message, _, _, _} = M ->
+            ?assertEqual({message, <<"chan1">>, <<"msg">>, Sub}, M)
+    after 10 ->
+            throw(timeout)
+    end,
 
-%%     receive
-%%         Msg ->
-%%             throw({unexpected_message, Msg})
-%%     after 5 ->
-%%             ok
-%%     end.
+    receive
+        Msg ->
+            throw({unexpected_message, Msg})
+    after 5 ->
+            ok
+    end,
+    eredis_sub:stop(Sub).
 
 %% Push size so high, the queue will be used
 pubsub2_test() ->
@@ -46,11 +47,75 @@ pubsub2_test() ->
     lists:foreach(
       fun(_) ->
               Msg = binary:copy(<<"0">>, 2048),
-              ?assertEqual({ok, <<"1">>}, eredis:q(Pub, ["PUBLISH", chan, Msg]))
+              ?assertEqual({ok, <<"1">>}, eredis:q(Pub, [publish, chan, Msg]))
       end, lists:seq(1, 500)),
-    %%Msgs = recv_all(Sub),
-    %%?assertEqual(5, length(Msgs)).
-    ok.
+    Msgs = recv_all(Sub),
+    ?assertEqual(500, length(Msgs)),
+    eredis_sub:stop(Sub).
+
+pubsub_manage_subscribers_test() ->
+    Pub = c(),
+    Sub = s([<<"chan">>]),
+    unlink(Sub),
+    ?assertMatch(#state{controlling_process=undefined}, get_state(Sub)),
+    S1 = subscriber(Sub),
+    ok = eredis_sub:controlling_process(Sub, S1),
+    #state{controlling_process={_, S1}} = get_state(Sub),
+    S2 = subscriber(Sub),
+    ok = eredis_sub:controlling_process(Sub, S2),
+    #state{controlling_process={_, S2}} = get_state(Sub),
+    eredis:q(Pub, ["PUBLISH", chan, msg1]),
+    S1 ! stop,
+    ok = wait_for_stop(S1),
+    eredis:q(Pub, ["PUBLISH", chan, msg2]),
+    ?assertEqual({message, <<"chan">>, <<"msg1">>, Sub}, wait_for_msg(S2)),
+    ?assertEqual({message, <<"chan">>, <<"msg2">>, Sub}, wait_for_msg(S2)),
+    S2 ! stop,
+    ok = wait_for_stop(S2),
+    Ref = erlang:monitor(process, Sub),
+    receive {'DOWN', Ref, process, Sub, _} -> ok end.
+
+
+pubsub_connect_disconnect_messages_test() ->
+    Pub = c(),
+    Sub = s([<<"chan">>]),
+    S = subscriber(Sub),
+    ok = eredis_sub:controlling_process(Sub, S),
+    eredis:q(Pub, ["PUBLISH", chan, msg]),
+    wait_for_msg(S),
+    #state{socket=Sock} = get_state(Sub),
+    gen_tcp:close(Sock),
+    Sub ! {tcp_closed, Sock},
+    ?assertEqual({eredis_disconnected, Sub}, wait_for_msg(S)),
+    ?assertEqual({eredis_connected, Sub}, wait_for_msg(S)),
+    eredis_sub:stop(Sub).
+
+
+
+%% drop_queue_test() ->
+%%     Pub = c(),
+%%     {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", [<<"foo">>], 100,
+%%                                       10, drop),
+%%     ok = eredis_sub:controlling_process(Sub),
+
+%%     [eredis:q(Pub, [publish, foo, N]) || N <- lists:seq(1, 12)],
+
+%%     receive M1 -> ?assertEqual({message,<<"foo">>,<<"1">>, Sub}, M1) end,
+%%     receive M2 -> ?assertEqual({dropped, 11}, M2) end.
+
+crash_queue_test() ->
+    Pub = c(),
+    process_flag(trap_exit, true),
+    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", [<<"foo">>], 100,
+                                      10, exit),
+    true = unlink(Sub),
+    ok = eredis_sub:controlling_process(Sub),
+    Ref = erlang:monitor(process, Sub),
+
+    [eredis:q(Pub, [publish, foo, N]) || N <- lists:seq(1, 12)],
+
+    receive M1 -> ?assertEqual({message,<<"foo">>,<<"1">>, Sub}, M1) end,
+    receive M2 -> ?assertEqual({'DOWN', Ref, process, Sub, max_queue_size}, M2) end.
 
 
 recv_all(Sub) ->
@@ -64,51 +129,6 @@ recv_all(Sub, Acc) ->
     after 5 ->
               lists:reverse(Acc)
     end.
-
-
-%% pubsub_manage_subscribers_test() ->
-%%     Pub = c(),
-%%     Sub = s([<<"chan">>]),
-%%     unlink(Sub),
-
-%%     error_logger:info_msg("~p~n", [get_state(Sub)]),
-
-%%     ?assertMatch(#state{controlling_process=undefined}, get_state(Sub)),
-%%     S1 = subscriber(Sub),
-%%     ok = eredis:controlling_process(Sub, S1),
-%%     #state{controlling_process={_, S1}} = get_state(Sub),
-%%     S2 = subscriber(Sub),
-%%     ok = eredis:controlling_process(Sub, S2),
-%%     #state{controlling_process={_, S2}} = get_state(Sub),
-%%     eredis:q(Pub, ["PUBLISH", chan, msg1]),
-%%     S1 ! stop,
-%%     ok = wait_for_stop(S1),
-%%     eredis:q(Pub, ["PUBLISH", chan, msg2]),
-%%     M2 = wait_for_msg(S2),
-%%     ?assertEqual(M2, {message, <<"chan">>, <<"msg1">>, Sub}),
-%%     M3 = wait_for_msg(S2),
-%%     ?assertEqual(M3, {message, <<"chan">>, <<"msg2">>, Sub}),
-%%     S2 ! stop,
-%%     ok = wait_for_stop(S2),
-%%     Ref = erlang:monitor(process, Sub),
-%%     receive {'DOWN', Ref, process, Sub, _} -> ok end.
-
-
-%% pubsub_connect_disconnect_messages_test() ->
-%%     Pub = c(),
-%%     Sub = s([<<"chan">>]),
-%%     S = subscriber(Sub),
-%%     ok = eredis:controlling_process(Sub, S),
-%%     eredis:q(Pub, ["PUBLISH", chan, msg]),
-%%     wait_for_msg(S),
-%%     #state{socket=Sock} = get_state(Sub),
-%%     gen_tcp:close(Sock),
-%%     Sub ! {tcp_closed, Sock},
-%%     M1 = wait_for_msg(S),
-%%     ?assertEqual({eredis_disconnected, Sub}, M1),
-%%     M2 = wait_for_msg(S),
-%%     ?assertEqual({eredis_connected, Sub}, M2).
-
 
 subscriber(Client) ->
     Test = self(),
@@ -128,7 +148,7 @@ subscriber(Client, Test) ->
             ok;
         Msg ->
             Test ! {got_message, self(), Msg},
-            eredis:ack_message(Client),
+            eredis_sub:ack_message(Client),
             subscriber(Client, Test)
     end.
 
