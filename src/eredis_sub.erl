@@ -10,9 +10,10 @@
 %% Specified in http://www.erlang.org/doc/man/gen_server.html#call-3
 -define(TIMEOUT, 5000).
 
--export([start_link/1, start_link/4, start_link/7, stop/1,
+-export([start_link/1, start_link/4, start_link/7, stop/1, receiver/1, sub_test/0,
          controlling_process/1, controlling_process/2, controlling_process/3,
          ack_message/1]).
+
 
 %%
 %% PUBLIC API
@@ -96,3 +97,25 @@ controlling_process(Client, Pid, Timeout) ->
 %% message must be acknowledged before the next one is received
 ack_message(Client) ->
     gen_server:cast(Client, {ack_message, self()}).
+
+
+%%
+%% STUFF FOR TRYING OUT PUBSUB
+%%
+
+receiver(Sub) ->
+    receive
+        {dropped, N} ->
+            io:format("dropped ~p", [N]),
+            ?MODULE:receiver(Sub);
+        _Msg ->
+            %%io:format("."),
+            ack_message(Sub),
+            ?MODULE:receiver(Sub)
+    end.
+
+sub_test() ->
+    {ok, Sub} = start_link("127.0.0.1", 6379, [], [<<"foo">>], 100, 1000, drop),
+    Receiver = spawn(fun () -> receiver(Sub) end),
+    controlling_process(Sub, Receiver),
+    Sub.
