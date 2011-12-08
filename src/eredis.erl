@@ -16,7 +16,8 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, q/2, q/3, qp/2, qp/3]).
+         start_link/5, q/2, q/3, qp/2, qp/3,
+         add_subscriber/1, add_subscriber/2, add_subscriber/3]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -82,6 +83,41 @@ qp(Client, Pipeline) ->
 
 qp(Client, Pipeline, Timeout) ->
     pipeline(Client, Pipeline, Timeout).
+
+
+-spec add_subscriber(Client::pid()) -> {ok, reference()}.
+%% @doc: Add the calling process as a pubsub subscriber. Pubsub
+%% subscribers receive three kinds of messages. In each message, the
+%% reference is the same one returned by the add_subscriber call.
+%%
+%%   {message, Channel::binary(), Message::binary(), reference()}
+%%     This is sent for each pubsub message received by the client.
+%%
+%%   {eredis_disconnected, reference()}
+%%     This is sent when the eredis client is disconnected from redis.
+%%
+%%   {eredis_connected, reference()}
+%%     This is sent when the eredis client reconnects to redis after
+%%     an existing connection was disconnected.
+%%
+%% Note that you must still issue SUBSCRIBE or PSUBSCRIBE redis
+%% commands to receive pubsub messages. Also, once you issue a
+%% SUBSCRIBE or PSUBSCRIBE command, that eredis client may only be
+%% used to add or remove pubsub subscriptions and to receive pubsub
+%% messages. That is how Redis pubsub works, it is not an artifact
+%% of eredis.
+add_subscriber(Client) ->
+    add_subscriber(Client, self()).
+
+-spec add_subscriber(Client::pid(), Subscriber::pid()) -> {ok, reference()}.
+%% @doc: Add the given process (pid) as a pubsub subscriber.
+add_subscriber(Client, Subscriber) ->
+    add_subscriber(Client, Subscriber, ?TIMEOUT).
+
+%% @doc: Add the given process (pid) as a pubsub subscriber
+%% with the given Timeout.
+add_subscriber(Client, Subscriber, Timeout) ->
+    gen_server:call(Client, {add_subscriber, Subscriber}, Timeout).
 
 
 %%

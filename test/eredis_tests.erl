@@ -1,6 +1,7 @@
 -module(eredis_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("../src/eredis_priv.hrl").
 
 -import(eredis, [create_multibulk/1]).
 
@@ -121,3 +122,107 @@ multibulk_test_() ->
      ?_assertThrow({cannot_store_floats, 123.5},
                    list_to_binary(create_multibulk(['SET', foo, 123.5])))
     ].
+
+
+
+pubsub_test() ->
+    Pub = c(),
+    Sub = c(),
+    {ok, Ref} = eredis:add_subscriber(Sub),
+    Res1 = eredis:q(Sub, ["SUBSCRIBE", chan]),
+    ?assertEqual({ok, [<<"subscribe">>, <<"chan">>, <<"1">>]}, Res1),
+    Res2 = eredis:q(Pub, ["PUBLISH", chan, msg]),
+    ?assertEqual({ok, <<"1">>}, Res2),
+    Msg = receive
+              {message, _, _, _} = InMsg ->
+                  InMsg
+          end,
+    ?assertEqual({message, <<"chan">>, <<"msg">>, Ref}, Msg).
+
+
+pubsub_manage_subscribers_test() ->
+    Pub = c(),
+    Sub = c(),
+    eredis:q(Sub, ["SUBSCRIBE", chan]),
+    #state{subscribers=[]} = get_state(Sub),
+    S1 = subscriber(),
+    {ok, Ref1} = eredis:add_subscriber(Sub, S1),
+    #state{subscribers=[{Ref1, S1}]} = get_state(Sub),
+    S2 = subscriber(),
+    {ok, Ref2} = eredis:add_subscriber(Sub, S2),
+    #state{subscribers=[{Ref2, S2}, {Ref1, S1}]} = get_state(Sub),
+    eredis:q(Pub, ["PUBLISH", chan, msg1]),
+    M1 = wait_for_msg(S1),
+    ?assertEqual(M1, {message, <<"chan">>, <<"msg1">>, Ref1}),
+    S1 ! stop,
+    ok = wait_for_stop(S1),
+    #state{subscribers=[{Ref2, S2}]} = get_state(Sub),
+    eredis:q(Pub, ["PUBLISH", chan, msg2]),
+    M2 = wait_for_msg(S2),
+    ?assertEqual(M2, {message, <<"chan">>, <<"msg1">>, Ref2}),
+    M3 = wait_for_msg(S2),
+    ?assertEqual(M3, {message, <<"chan">>, <<"msg2">>, Ref2}),
+    S2 ! stop,
+    ok = wait_for_stop(S2),
+    #state{subscribers=[]} = get_state(Sub).
+
+
+pubsub_connect_disconnect_messages_test() ->
+    Pub = c(),
+    Sub = c(),
+    eredis:q(Sub, ["SUBSCRIBE", chan]),
+    S = subscriber(),
+    {ok, Ref} = eredis:add_subscriber(Sub, S),
+    eredis:q(Pub, ["PUBLISH", chan, msg]),
+    wait_for_msg(S),
+    #state{socket=Sock} = get_state(Sub),
+    gen_tcp:close(Sock),
+    Sub ! {tcp_closed, Sock},
+    M1 = wait_for_msg(S),
+    ?assertEqual({eredis_disconnected, Ref}, M1),
+    M2 = wait_for_msg(S),
+    ?assertEqual({eredis_connected, Ref}, M2).
+
+
+subscriber() ->
+    Test = self(),
+    Pid = spawn(fun () -> subscriber(Test) end),
+    spawn(fun() ->
+                  Ref = erlang:monitor(process, Pid),
+                  receive
+                      {'DOWN', Ref, _, _, _} ->
+                          Test ! {stopped, Pid}
+                  end
+          end),
+    Pid.
+
+subscriber(Test) ->
+    receive
+        stop ->
+            ok;
+        Msg ->
+            Test ! {got_message, self(), Msg},
+            subscriber(Test)
+    end.
+
+wait_for_msg(Subscriber) ->
+    receive
+        {got_message, Subscriber, Msg} ->
+            Msg
+    end.
+
+wait_for_stop(Subscriber) ->
+    receive
+        {stopped, Subscriber} ->
+            ok
+    end.
+
+get_state(Pid)
+  when is_pid(Pid) ->
+    {status, _, _, [_, _, _, _, State]} = sys:get_status(Pid),
+    get_state(State);
+get_state([{data, [{"State", State}]} | _]) ->
+    State;
+get_state([_|Rest]) ->
+    get_state(Rest).
+
