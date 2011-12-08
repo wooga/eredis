@@ -7,7 +7,7 @@
 %%
 %% The client works like this:
 %%  * When starting up, we connect to Redis with the given connection
-%%     information, or fail.
+%%    information, or fail.
 %%  * Users calls us using gen_server:call, we send the request to Redis,
 %%    add the calling process at the end of the queue and reply with
 %%    noreply. We are then free to handle new requests and may reply to
@@ -19,13 +19,15 @@
 %%  * For pipeline commands, we include the number of responses we are
 %%    waiting for in each element of the queue. Responses are queued until
 %%    we have all the responses we need and then reply with all of them.
+%%  * Redis pubsub messages are handled by sending Erlang messages to
+%%    all registered subscribers.
 %%
 -module(eredis_client).
 -author('knut.nesheim@wooga.com').
 
 -behaviour(gen_server).
 
--include("eredis.hrl").
+-include("eredis_priv.hrl").
 
 %% API
 -export([start_link/5, stop/1, select_database/2]).
@@ -33,18 +35,6 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-
--record(state, {
-          host :: string() | undefined,
-          port :: integer() | undefined,
-          password :: binary() | undefined,
-          database :: binary() | undefined,
-          reconnect_sleep :: integer() | undefined,
-
-          socket :: port() | undefined,
-          parser_state :: #pstate{} | undefined,
-          queue :: queue() | undefined
-}).
 
 -define(SOCKET_OPTS, [binary, {active, once}, {packet, raw}, {reuseaddr, true}]).
 
@@ -77,7 +67,8 @@ init([Host, Port, Database, Password, ReconnectSleep]) ->
                    reconnect_sleep = ReconnectSleep,
 
                    parser_state = eredis_parser:init(),
-                   queue = queue:new()},
+                   queue = queue:new(),
+                   msg_queue = queue:new()},
 
     case connect(State) of
         {ok, NewState} ->
@@ -92,6 +83,9 @@ handle_call({request, Req}, From, State) ->
 handle_call({pipeline, Pipeline}, From, State) ->
     do_pipeline(Pipeline, From, State);
 
+handle_call({controlling_process, Pid}, _From, State) ->
+    do_controlling_process(Pid, State);
+
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
@@ -99,13 +93,19 @@ handle_call(_Request, _From, State) ->
     {reply, unknown_request, State}.
 
 
+handle_cast({ack_message, Pid},
+            #state{controlling_process={_, Pid}} = State) ->
+    {noreply, maybe_send_message(State#state{msg_state=ready})};
+handle_cast({ack_message, _}, State) ->
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+
 %% Receive data from socket, see handle_response/2
 handle_info({tcp, _Socket, Bs}, State) ->
-    inet:setopts(State#state.socket, [{active, once}]),
-    {noreply, handle_response(Bs, State)};
+    NewState = State#state{conn_state=passive},
+    {noreply, handle_response(Bs, update_socket_state(NewState))};
 
 %% Socket got closed, for example by Redis terminating idle
 %% clients. Spawn of a new process which will try to reconnect and
@@ -113,6 +113,7 @@ handle_info({tcp, _Socket, Bs}, State) ->
 %% an error message to all our clients.
 handle_info({tcp_closed, _Socket}, State) ->
     Self = self(),
+    send_to_controller({eredis_disconnected, Self}, State),
     spawn(fun() -> reconnect_loop(Self, State) end),
 
     %% Throw away the socket and the queue, as we will never get a
@@ -123,7 +124,15 @@ handle_info({tcp_closed, _Socket}, State) ->
 %% Redis is ready to accept requests, the given Socket is a socket
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
-    {noreply, State#state{socket = Socket}};
+    send_to_controller({eredis_connected, self()}, State),
+    {noreply, State#state{socket = Socket, conn_state = active_once}};
+
+%% Our controlling process is down.
+handle_info({'DOWN', Ref, process, Pid, _Reason},
+            #state{controlling_process={Ref, Pid}} = State) ->
+    {stop, shutdown, State#state{controlling_process=undefined,
+                                 msg_state=ready,
+                                 msg_queue=queue:new()}};
 
 %% eredis can be used in Poolboy, but it requires to support a simple API
 %% that Poolboy uses to manage the connections.
@@ -158,7 +167,7 @@ do_request(Req, From, State) ->
     case gen_tcp:send(State#state.socket, Req) of
         ok ->
             NewQueue = queue:in({1, From}, State#state.queue),
-            {noreply, State#state{queue = NewQueue}};
+            {noreply, update_socket_state(State#state{queue = NewQueue})};
         {error, Reason} ->
             {reply, {error, Reason}, State}
     end.
@@ -174,31 +183,38 @@ do_pipeline(Pipeline, From, State) ->
     case gen_tcp:send(State#state.socket, Pipeline) of
         ok ->
             NewQueue = queue:in({length(Pipeline), From, []}, State#state.queue),
-            {noreply, State#state{queue = NewQueue}};
+            {noreply, update_socket_state(State#state{queue = NewQueue})};
         {error, Reason} ->
             {reply, {error, Reason}, State}
     end.
+
+-spec do_controlling_process(Pid::pid(), #state{}) -> {reply, Reply::{ok, reference()}, #state{}}.
+do_controlling_process(Pid, State) ->
+    case State#state.controlling_process of
+        undefined ->
+            ok;
+        {OldRef, _OldPid} ->
+            erlang:demonitor(OldRef)
+    end,
+    Ref = erlang:monitor(process, Pid),
+    {reply, ok, State#state{controlling_process={Ref, Pid}}}.
 
 -spec handle_response(Data::binary(), State::#state{}) -> NewState::#state{}.
 %% @doc: Handle the response coming from Redis. This includes parsing
 %% and replying to the correct client, handling partial responses,
 %% handling too much data and handling continuations.
-handle_response(Data, #state{parser_state = ParserState,
-                             queue = Queue} = State) ->
-
+handle_response(Data, #state{parser_state = ParserState} = State) ->
     case eredis_parser:parse(ParserState, Data) of
         %% Got complete response, return value to client
         {ReturnCode, Value, NewParserState} ->
-            NewQueue = reply({ReturnCode, Value}, Queue),
-            State#state{parser_state = NewParserState,
-                        queue = NewQueue};
+            reply({ReturnCode, Value}, State#state{parser_state=NewParserState});
 
         %% Got complete response, with extra data, reply to client and
         %% recurse over the extra data
         {ReturnCode, Value, Rest, NewParserState} ->
-            NewQueue = reply({ReturnCode, Value}, Queue),
-            handle_response(Rest, State#state{parser_state = NewParserState,
-                                              queue = NewQueue});
+            NewState = reply({ReturnCode, Value},
+                             State#state{parser_state=NewParserState}),
+            handle_response(Rest, NewState);
 
         %% Parser needs more data, the parser state now contains the
         %% continuation data and we will try calling parse again when
@@ -210,17 +226,24 @@ handle_response(Data, #state{parser_state = ParserState,
 %% @doc: Sends a value to the first client in queue. Returns the new
 %% queue without this client. If we are still waiting for parts of a
 %% pipelined request, push the reply to the the head of the queue and
-%% wait for another reply from redis.
-reply(Value, Queue) ->
+%% wait for another reply from redis. Pubsub messages are not part of
+%% the normal reply stream and will instead be sent as Erlang messages
+%% to the controlling process (if any).
+reply({ok, [<<"message">>, Channel, Message]}, State) ->
+    Msg = {message, Channel, Message, self()},
+    MsgQueue = queue:in(Msg, State#state.msg_queue),
+    maybe_send_message(State#state{msg_queue=MsgQueue});
+reply(Value, #state{queue=Queue} = State) ->
     case queue:out(Queue) of
         {{value, {1, From}}, NewQueue} ->
             gen_server:reply(From, Value),
-            NewQueue;
+            State#state{queue=NewQueue};
         {{value, {1, From, Replies}}, NewQueue} ->
             gen_server:reply(From, lists:reverse([Value | Replies])),
-            NewQueue;
+            State#state{queue=NewQueue};
         {{value, {N, From, Replies}}, NewQueue} when N > 1 ->
-            queue:in_r({N - 1, From, [Value | Replies]}, NewQueue);
+            State#state{queue=queue:in_r({N - 1, From, [Value | Replies]},
+                                         NewQueue)};
         {empty, Queue} ->
             %% Oops
             error_logger:info_msg("Nothing in queue, but got value from parser~n"),
@@ -293,4 +316,42 @@ reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep}=State) ->
         _ ->
             timer:sleep(ReconnectSleep),
             reconnect_loop(Client, State)
+    end.
+
+
+send_to_controller(_Msg, #state{controlling_process=undefined}) ->
+    ok;
+send_to_controller(Msg, #state{controlling_process={_Ref, Pid}}) ->
+    Pid ! Msg.
+
+
+maybe_send_message(#state{controlling_process=undefined} = State) ->
+    State#state{msg_queue=queue:new()};
+maybe_send_message(#state{msg_state=need_ack} = State) ->
+    State;
+maybe_send_message(State) ->
+    case queue:out(State#state.msg_queue) of
+        {empty, _Queue} ->
+            State;
+        {{value, Msg}, Queue} ->
+            send_to_controller(Msg, State),
+            State#state{msg_queue=Queue, msg_state=need_ack}
+    end.
+
+
+update_socket_state(#state{conn_state=active_once} = State) ->
+    State;
+update_socket_state(#state{controlling_process=undefined} = State) ->
+    inet:setopts(State#state.socket, [{active, once}]),
+    State#state{conn_state=active_once};
+update_socket_state(#state{msg_state=ready} = State) ->
+    inet:setopts(State#state.socket, [{active, once}]),
+    State#state{conn_state=active_once};
+update_socket_state(State) ->
+    case queue:is_empty(State#state.queue) of
+        true ->
+            State;
+        false ->
+            inet:setopts(State#state.socket, [{active, once}]),
+            State#state{conn_state=active_once}
     end.
