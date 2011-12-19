@@ -16,7 +16,7 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, q/2, q/3, qp/2, qp/3]).
+         start_link/5, stop/1, q/2, q/3, qp/2, qp/3]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -56,6 +56,8 @@ start_link(Args) ->
     ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
     start_link(Host, Port, Database, Password, ReconnectSleep).
 
+stop(Client) ->
+    eredis_client:stop(Client).
 
 -spec q(Client::pid(), Command::iolist()) ->
                {ok, return_value()} | {error, Reason::binary() | no_connection}.
