@@ -92,16 +92,18 @@ pubsub_connect_disconnect_messages_test() ->
 
 
 
-%% drop_queue_test() ->
-%%     Pub = c(),
-%%     {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", [<<"foo">>], 100,
-%%                                       10, drop),
-%%     ok = eredis_sub:controlling_process(Sub),
+drop_queue_test() ->
+    Pub = c(),
+    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", [<<"foo">>], 100,
+                                      10, drop),
+    ok = eredis_sub:controlling_process(Sub),
 
-%%     [eredis:q(Pub, [publish, foo, N]) || N <- lists:seq(1, 12)],
+    [eredis:q(Pub, [publish, foo, N]) || N <- lists:seq(1, 12)],
 
-%%     receive M1 -> ?assertEqual({message,<<"foo">>,<<"1">>, Sub}, M1) end,
-%%     receive M2 -> ?assertEqual({dropped, 11}, M2) end.
+    receive M1 -> ?assertEqual({message,<<"foo">>,<<"1">>, Sub}, M1) end,
+    receive M2 -> ?assertEqual({dropped, 11}, M2) end,
+    eredis_sub:stop(Sub).
+
 
 crash_queue_test() ->
     Pub = c(),
