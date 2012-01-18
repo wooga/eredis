@@ -107,9 +107,9 @@ drop_queue_test() ->
 
 crash_queue_test() ->
     Pub = c(),
-    process_flag(trap_exit, true),
     {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", [<<"foo">>], 100,
                                       10, exit),
+
     true = unlink(Sub),
     ok = eredis_sub:controlling_process(Sub),
     Ref = erlang:monitor(process, Sub),
@@ -118,6 +118,39 @@ crash_queue_test() ->
 
     receive M1 -> ?assertEqual({message,<<"foo">>,<<"1">>, Sub}, M1) end,
     receive M2 -> ?assertEqual({'DOWN', Ref, process, Sub, max_queue_size}, M2) end.
+
+
+
+dynamic_channels_test() ->
+    Pub = c(),
+    Sub = s([<<"foo">>]),
+    ok = eredis_sub:controlling_process(Sub),
+
+    eredis:q(Pub, [publish, newchan, foo]),
+
+    receive {message, <<"foo">>, _, _} -> ?assert(false)
+    after 5 -> ok end,
+
+    eredis_sub:subscribe(Sub, [<<"newchan">>, <<"otherchan">>]),
+    receive M1 -> ?assertEqual({subscribed, <<"newchan">>, Sub}, M1) end,
+    eredis_sub:ack_message(Sub),
+    receive M2 -> ?assertEqual({subscribed, <<"otherchan">>, Sub}, M2) end,
+    eredis_sub:ack_message(Sub),
+    ?assertEqual({ok, [<<"newchan">>, <<"otherchan">>, <<"foo">>]},
+                 eredis_sub:channels(Sub)),
+
+    eredis:q(Pub, [publish, newchan, foo]),
+    ?assertEqual([{message, <<"newchan">>, <<"foo">>, Sub}], recv_all(Sub)),
+    eredis:q(Pub, [publish, otherchan, foo]),
+    ?assertEqual([{message, <<"otherchan">>, <<"foo">>, Sub}], recv_all(Sub)),
+
+    eredis_sub:unsubscribe(Sub, [<<"otherchan">>, <<"foo">>]),
+    eredis_sub:ack_message(Sub),
+    receive M3 -> ?assertEqual({unsubscribed, <<"otherchan">>, Sub}, M3) end,
+    eredis_sub:ack_message(Sub),
+    receive M4 -> ?assertEqual({unsubscribed, <<"foo">>, Sub}, M4) end,
+
+    ?assertEqual({ok, [<<"newchan">>]}, eredis_sub:channels(Sub)).
 
 
 recv_all(Sub) ->

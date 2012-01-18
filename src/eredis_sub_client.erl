@@ -77,6 +77,9 @@ handle_call({controlling_process, Pid}, _From, State) ->
     Ref = erlang:monitor(process, Pid),
     {reply, ok, State#state{controlling_process={Ref, Pid}, msg_state = ready}};
 
+handle_call(get_channels, _From, State) ->
+    {reply, {ok, State#state.channels}, State};
+
 
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
@@ -97,7 +100,6 @@ handle_cast({ack_message, Pid},
 %% socket.
 handle_cast({ack_message, Pid},
             #state{controlling_process={_, Pid}} = State) ->
-
     NewState = case queue:out(State#state.msg_queue) of
                    {empty, _Queue} ->
                        State#state{msg_state = ready};
@@ -106,6 +108,18 @@ handle_cast({ack_message, Pid},
                        State#state{msg_queue = Queue, msg_state = need_ack}
                end,
     {noreply, NewState};
+
+handle_cast({subscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
+    Command = eredis:create_multibulk(["SUBSCRIBE" | Channels]),
+    ok = gen_tcp:send(State#state.socket, Command),
+    {noreply, State#state{channels = Channels ++ State#state.channels}};
+
+handle_cast({unsubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
+    Command = eredis:create_multibulk(["UNSUBSCRIBE" | Channels]),
+    ok = gen_tcp:send(State#state.socket, Command),
+    NewChannels = lists:foldl(fun (C, Cs) -> lists:delete(C, Cs) end,
+                              State#state.channels, Channels),
+    {noreply, State#state{channels = NewChannels}};
 
 handle_cast({ack_message, _}, State) ->
     {noreply, State};
@@ -206,8 +220,15 @@ handle_response(Data, #state{parser_state = ParserState} = State) ->
 %% acknowledged the previous process, otherwise the message is queued
 %% for later delivery.
 reply({ok, [<<"message">>, Channel, Message]}, State) ->
-    Msg = {message, Channel, Message, self()},
+    queue_or_send({message, Channel, Message, self()}, State);
+reply({ok, [<<"subscribe">>, Channel, _]}, State) ->
+    queue_or_send({subscribed, Channel, self()}, State);
+reply({ok, [<<"unsubscribe">>, Channel, _]}, State) ->
+    queue_or_send({unsubscribed, Channel, self()}, State);
+reply({ReturnCode, Value}, State) ->
+    throw({unexpected_response_from_redis, ReturnCode, Value, State}).
 
+queue_or_send(Msg, State) ->
     case State#state.msg_state of
         need_ack ->
             MsgQueue = queue:in(Msg, State#state.msg_queue),
@@ -215,9 +236,7 @@ reply({ok, [<<"message">>, Channel, Message]}, State) ->
         ready ->
             send_to_controller(Msg, State),
             State#state{msg_state = need_ack}
-    end;
-reply({ReturnCode, Value}, State) ->
-    throw({unexpected_response_from_redis, ReturnCode, Value, State}).
+    end.
 
 
 %% @doc: Helper for connecting to Redis. These commands are

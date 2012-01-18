@@ -12,7 +12,7 @@
 
 -export([start_link/1, start_link/4, start_link/7, stop/1, receiver/1, sub_test/0,
          controlling_process/1, controlling_process/2, controlling_process/3,
-         ack_message/1]).
+         ack_message/1, subscribe/2, unsubscribe/2, channels/1]).
 
 
 %%
@@ -67,6 +67,12 @@ stop(Pid) ->
 %%     and the behaviour is to drop messages, this message is sent when
 %%     the queue is flushed.
 %%
+%%   {subscribed, Channel::binary(), pid()}
+%%     When using eredis_sub:subscribe(pid()), this message will be
+%%     sent for each channel Redis aknowledges the subscription. The
+%%     opposite, 'unsubscribed' is sent when Redis aknowledges removal
+%%     of a subscription.
+%%
 %%   {eredis_disconnected, pid()}
 %%     This is sent when the eredis client is disconnected from redis.
 %%
@@ -97,6 +103,25 @@ controlling_process(Client, Pid, Timeout) ->
 %% message must be acknowledged before the next one is received
 ack_message(Client) ->
     gen_server:cast(Client, {ack_message, self()}).
+
+
+%% @doc: Subscribe to the given channels. Returns immediately. The
+%% result will be delivered to the controlling process as any other
+%% message. Delivers {subscribed, Channel::binary(), pid()}
+-spec subscribe(pid(), [channel()]) -> ok.
+subscribe(Client, Channels) ->
+    gen_server:cast(Client, {subscribe, self(), Channels}).
+
+unsubscribe(Client, Channels) ->
+    gen_server:cast(Client, {unsubscribe, self(), Channels}).
+
+%% @doc: Returns the channels the given client is currently
+%% subscribing to. Note: this list is based on the channels at startup
+%% and any channel added during runtime. It might not immediately
+%% reflect the channels Redis thinks the client is subscribed to.
+channels(Client) ->
+    gen_server:call(Client, get_channels).
+
 
 
 %%
