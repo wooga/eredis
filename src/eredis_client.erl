@@ -241,10 +241,10 @@ connect(State) ->
                         ok ->
                             {ok, State#state{socket = Socket}};
                         {error, Reason} ->
-                            {select_error, Reason}
+                            {error, {select_error, Reason}}
                     end;
                 {error, Reason} ->
-                    {authentication_error, Reason}
+                    {error, {authentication_error, Reason}}
             end;
         {error, Reason} ->
             {error, {connection_error, Reason}}
@@ -279,7 +279,7 @@ do_sync_command(Socket, Command) ->
 %% @doc: Loop until a connection can be established, this includes
 %% successfully issuing the auth and select calls. When we have a
 %% connection, give the socket to the redis client.
-reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep}=State) ->
+reconnect_loop(Client, #state{reconnect_sleep = ReconnectSleep} = State) ->
     case catch(connect(State)) of
         {ok, #state{socket = Socket}} ->
             gen_tcp:controlling_process(Socket, Client),
