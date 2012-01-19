@@ -3,9 +3,8 @@
 %%
 %% This client implements a subscriber to a Redis pubsub channel. It
 %% is implemented in the same way as eredis_client, except channel
-%% messages are streamed to the controlling process. eredis will only
-%% receive the next message on the socket when the current message has
-%% been acked.
+%% messages are streamed to the controlling process. Messages are
+%% queued and delivered when the client acknowledges receipt.
 %%
 %% There is one consuming process per eredis_sub_client.
 -module(eredis_sub_client).
@@ -17,7 +16,7 @@
 
 
 %% API
--export([start_link/7, stop/1]).
+-export([start_link/6, stop/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -30,13 +29,12 @@
 -spec start_link(Host::list(),
                  Port::integer(),
                  Password::string(),
-                 Channels::[channel()],
                  ReconnectSleep::integer(),
                  MaxQueueSize::integer(),
                  QueueBehaviour::drop | exit) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Host, Port, Password, Channels, ReconnectSleep, MaxQueueSize, QueueBehaviour) ->
-    Args = [Host, Port, Password, Channels, ReconnectSleep, MaxQueueSize, QueueBehaviour],
+start_link(Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour) ->
+    Args = [Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour],
     gen_server:start_link(?MODULE, Args, []).
 
 
@@ -47,12 +45,12 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Password, Channels, ReconnectSleep, MaxQueueSize, QueueBehaviour]) ->
+init([Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour]) ->
     State = #state{host            = Host,
                    port            = Port,
                    password        = list_to_binary(Password),
                    reconnect_sleep = ReconnectSleep,
-                   channels        = Channels,
+                   channels        = [],
                    parser_state    = eredis_parser:init(),
                    msg_queue       = queue:new(),
                    max_queue_size  = MaxQueueSize,
@@ -248,45 +246,13 @@ connect(State) ->
             inet:setopts(Socket, [{active, false}]),
             case authenticate(Socket, State#state.password) of
                 ok ->
-                    case do_subscribe(Socket, State#state.channels) of
-                        ok ->
-                            {ok, State#state{socket = Socket}};
-                        {error, Reason} ->
-                            {error, {channel_subscribe_error, Reason}}
-                    end;
+                    {ok, State#state{socket = Socket}};
                 {error, Reason} ->
                     {error, {authentication_error, Reason}}
             end;
         {error, Reason} ->
             {error, {connection_error, Reason}}
     end.
-
-do_subscribe(_Socket, []) ->
-    {error, no_channels};
-do_subscribe(Socket, Channels) ->
-    Command = eredis:create_multibulk(["SUBSCRIBE" | Channels]),
-    ok = gen_tcp:send(Socket, Command),
-
-    case gen_tcp:recv(Socket, 0) of
-        {ok, Data} ->
-            case parse_subscribe_result(Data, eredis_parser:init(), []) of
-                {ok, Channels} ->
-                    ok;
-                Other ->
-                    {error, {unexpected_data, Other}}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-parse_subscribe_result(Data, ParserState, Acc) ->
-    case eredis_parser:parse(ParserState, Data) of
-        {ok, [<<"subscribe">>, Chan, _], _} ->
-            {ok, lists:reverse([Chan | Acc])};
-        {ok, [<<"subscribe">>, Chan, _], Rest, NewParserState} ->
-            parse_subscribe_result(Rest, NewParserState, [Chan | Acc])
-    end.
-
 
 
 authenticate(_Socket, <<>>) ->
