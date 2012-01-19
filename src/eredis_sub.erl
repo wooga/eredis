@@ -132,17 +132,22 @@ channels(Client) ->
 
 receiver(Sub) ->
     receive
-        {dropped, N} ->
-            io:format("dropped ~p", [N]),
-            ?MODULE:receiver(Sub);
-        _Msg ->
-            %%io:format("."),
+        Msg ->
+            io:format("received ~p~n", [Msg]),
             ack_message(Sub),
             ?MODULE:receiver(Sub)
     end.
 
 sub_test() ->
-    {ok, Sub} = start_link("127.0.0.1", 6379, [], [<<"foo">>], 100, 1000, drop),
-    Receiver = spawn(fun () -> receiver(Sub) end),
-    controlling_process(Sub, Receiver),
-    Sub.
+    {ok, Sub} = start_link(),
+    Receiver = spawn_link(fun () ->
+                                  controlling_process(Sub),
+                                  subscribe(Sub, [<<"foo">>]),
+                                  receiver(Sub)
+                          end),
+    {Sub, Receiver}.
+
+pub_test() ->
+    {ok, P} = eredis:start_link(),
+    eredis:q(P, ["PUBLISH", "foo", "bar"]),
+    eredis_client:stop(P).
