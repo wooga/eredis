@@ -12,17 +12,27 @@ c() ->
     {ok, C} = Res,
     C.
 
-s(Channels) ->
-    Res = eredis_sub:start_link("127.0.0.1", 6379, "", Channels),
+s() ->
+    Res = eredis_sub:start_link("127.0.0.1", 6379, ""),
     ?assertMatch({ok, _}, Res),
     {ok, C} = Res,
     C.
 
+add_channels(Sub, Channels) ->
+    ok = eredis_sub:controlling_process(Sub),
+    ok = eredis_sub:subscribe(Sub, Channels),
+    lists:foreach(
+      fun (C) ->
+              receive M -> ?assertEqual({subscribed, C, Sub}, M)
+              after 1 -> ok end
+      end, Channels).
 
 pubsub_test() ->
     Pub = c(),
-    Sub = s([<<"chan1">>, <<"chan2">>]),
+    Sub = s(),
+    add_channels(Sub, [<<"chan1">>, <<"chan2">>]),
     ok = eredis_sub:controlling_process(Sub),
+
     ?assertEqual({ok, <<"1">>}, eredis:q(Pub, ["PUBLISH", chan1, msg])),
     receive
         {message, _, _, _} = M ->
@@ -42,7 +52,8 @@ pubsub_test() ->
 %% Push size so high, the queue will be used
 pubsub2_test() ->
     Pub = c(),
-    Sub = s([<<"chan">>]),
+    Sub = s(),
+    add_channels(Sub, [<<"chan">>]),
     ok = eredis_sub:controlling_process(Sub),
     lists:foreach(
       fun(_) ->
@@ -55,9 +66,11 @@ pubsub2_test() ->
 
 pubsub_manage_subscribers_test() ->
     Pub = c(),
-    Sub = s([<<"chan">>]),
+    Sub = s(),
+    add_channels(Sub, [<<"chan">>]),
     unlink(Sub),
-    ?assertMatch(#state{controlling_process=undefined}, get_state(Sub)),
+    Self = self(),
+    ?assertMatch(#state{controlling_process={_, Self}}, get_state(Sub)),
     S1 = subscriber(Sub),
     ok = eredis_sub:controlling_process(Sub, S1),
     #state{controlling_process={_, S1}} = get_state(Sub),
@@ -78,7 +91,8 @@ pubsub_manage_subscribers_test() ->
 
 pubsub_connect_disconnect_messages_test() ->
     Pub = c(),
-    Sub = s([<<"chan">>]),
+    Sub = s(),
+    add_channels(Sub, [<<"chan">>]),
     S = subscriber(Sub),
     ok = eredis_sub:controlling_process(Sub, S),
     eredis:q(Pub, ["PUBLISH", chan, msg]),
@@ -94,8 +108,8 @@ pubsub_connect_disconnect_messages_test() ->
 
 drop_queue_test() ->
     Pub = c(),
-    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", [<<"foo">>], 100,
-                                      10, drop),
+    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", 100, 10, drop),
+    add_channels(Sub, [<<"foo">>]),
     ok = eredis_sub:controlling_process(Sub),
 
     [eredis:q(Pub, [publish, foo, N]) || N <- lists:seq(1, 12)],
@@ -107,8 +121,8 @@ drop_queue_test() ->
 
 crash_queue_test() ->
     Pub = c(),
-    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", [<<"foo">>], 100,
-                                      10, exit),
+    {ok, Sub} = eredis_sub:start_link("127.0.0.1", 6379, "", 100, 10, exit),
+    add_channels(Sub, [<<"foo">>]),
 
     true = unlink(Sub),
     ok = eredis_sub:controlling_process(Sub),
@@ -123,7 +137,7 @@ crash_queue_test() ->
 
 dynamic_channels_test() ->
     Pub = c(),
-    Sub = s([<<"foo">>]),
+    Sub = s(),
     ok = eredis_sub:controlling_process(Sub),
 
     eredis:q(Pub, [publish, newchan, foo]),
@@ -136,7 +150,7 @@ dynamic_channels_test() ->
     eredis_sub:ack_message(Sub),
     receive M2 -> ?assertEqual({subscribed, <<"otherchan">>, Sub}, M2) end,
     eredis_sub:ack_message(Sub),
-    ?assertEqual({ok, [<<"newchan">>, <<"otherchan">>, <<"foo">>]},
+    ?assertEqual({ok, [<<"newchan">>, <<"otherchan">>]},
                  eredis_sub:channels(Sub)),
 
     eredis:q(Pub, [publish, newchan, foo]),
@@ -144,11 +158,9 @@ dynamic_channels_test() ->
     eredis:q(Pub, [publish, otherchan, foo]),
     ?assertEqual([{message, <<"otherchan">>, <<"foo">>, Sub}], recv_all(Sub)),
 
-    eredis_sub:unsubscribe(Sub, [<<"otherchan">>, <<"foo">>]),
+    eredis_sub:unsubscribe(Sub, [<<"otherchan">>]),
     eredis_sub:ack_message(Sub),
     receive M3 -> ?assertEqual({unsubscribed, <<"otherchan">>, Sub}, M3) end,
-    eredis_sub:ack_message(Sub),
-    receive M4 -> ?assertEqual({unsubscribed, <<"foo">>, Sub}, M4) end,
 
     ?assertEqual({ok, [<<"newchan">>]}, eredis_sub:channels(Sub)).
 
