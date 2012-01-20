@@ -37,6 +37,7 @@ Transactions:
     {ok, [<<"OK">>, <<"OK">>]} = eredis:q(C, ["EXEC"]).
 
 Pipelining:
+
     P1 = [["SET", a, "1"],
           ["LPUSH", b, "3"],
           ["LPUSH", b, "2"]].
@@ -44,6 +45,7 @@ Pipelining:
 
 
 Pubsub:
+
     1> eredis_sub:sub_test().
     received {subscribed,<<"foo">>,<0.34.0>}
     {<0.34.0>,<0.37.0>}
