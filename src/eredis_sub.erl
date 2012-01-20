@@ -14,7 +14,7 @@
          controlling_process/1, controlling_process/2, controlling_process/3,
          ack_message/1, subscribe/2, unsubscribe/2, channels/1]).
 
--export([receiver/1, sub_test/0, pub_test/0]).
+-export([receiver/1, sub_example/0, pub_example/0]).
 
 %%
 %% PUBLIC API
@@ -138,7 +138,7 @@ receiver(Sub) ->
             ?MODULE:receiver(Sub)
     end.
 
-sub_test() ->
+sub_example() ->
     {ok, Sub} = start_link(),
     Receiver = spawn_link(fun () ->
                                   controlling_process(Sub),
@@ -147,7 +147,7 @@ sub_test() ->
                           end),
     {Sub, Receiver}.
 
-pub_test() ->
+pub_example() ->
     {ok, P} = eredis:start_link(),
     eredis:q(P, ["PUBLISH", "foo", "bar"]),
     eredis_client:stop(P).
