@@ -2,11 +2,15 @@
 
 ## v1.0
 
-* Support added for pubsub. Implemented in `eredis_sub` and
-  `eredis_sub_client` is a subscriber that will forward messages from
-  Redis to an Erlang process with flow control. The user can configure
-  to either drop messages or crash the driver if a certain queue size
-  inside the driver is reached.
+* Support added for pubsub thanks to Dave Peticolas
+  (jdavisp3). Implemented in `eredis_sub` and `eredis_sub_client` is a
+  subscriber that will forward messages from Redis to an Erlang
+  process with flow control. The user can configure to either drop
+  messages or crash the driver if a certain queue size inside the
+  driver is reached.
+
+* Fixed error handling when eredis starts up and Redis is still
+  loading the dataset into memory.
 
 ## v0.7.0
 
