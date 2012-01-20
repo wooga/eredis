@@ -1,6 +1,7 @@
 -module(eredis_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("eredis.hrl").
 
 -import(eredis, [create_multibulk/1]).
 
@@ -106,8 +107,6 @@ c() ->
     ?assertMatch({ok, _}, Res),
     {ok, C} = Res,
     C.
-
-
 
 multibulk_test_() ->
     [?_assertEqual(<<"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n">>,

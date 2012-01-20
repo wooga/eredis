@@ -1,9 +1,14 @@
 # eredis
 
-Non-blocking Redis client with a focus on performance and robustness.
+Non-blocking Redis client with focus on performance and robustness.
 
-It supports authentication, choosing a specific database, transactions
-and pipelining.
+Supported Redis features:
+
+ * Any command, through eredis:q/2
+ * Transactions
+ * Pipelining
+ * Authentication & multiple dbs
+ * Pubsub
 
 ## Example
 
@@ -36,6 +41,15 @@ Pipelining:
           ["LPUSH", b, "3"],
           ["LPUSH", b, "2"]].
     [{ok, <<"OK">>}, {ok, <<"1">>}, {ok, <<"2">>}] = eredis:qp(C, P1).
+
+
+Pubsub:
+    1> eredis_sub:sub_test().
+    received {subscribed,<<"foo">>,<0.34.0>}
+    {<0.34.0>,<0.37.0>}
+    2> redis_sub:pub_test().
+    received {message,<<"foo">>,<<"bar">>,<0.34.0>}
+
 
 EUnit tests:
 
@@ -84,6 +98,28 @@ stampede of clients just waiting for a failed connection attempt or
 
 Note: If Eredis is starting up and cannot connect, it will fail
 immediately with `{connection_error, Reason}`.
+
+## Pubsub
+
+Thanks to Dave Peticolas (jdavisp3), eredis supports
+pubsub. `eredis_sub` offers a separate client that will forward
+channel messages from Redis to an Erlang process in a "active-once"
+pattern similar to gen_tcp sockets. After every message sent, the
+controlling process must acknowledge receipt using
+`eredis_sub:ack_message/1`.
+
+If the controlling process does not process messages fast enough,
+eredis will queue the messages up to a certain queue size controlled
+by configuration. When the max size is reached, eredis will either
+drop messages or crash, also based on configuration.
+
+Subscriptions are managed using `eredis_sub:subscribe/2` and
+`eredis_sub:unsubscribe/2`. When Redis acknowledges the change in
+subscription, a message is sent to the controlling process for each
+channel.
+
+For now, channel patterns are not supported, but it is relatively easy
+to add support. Patches are welcome :)
 
 ## AUTH and SELECT
 

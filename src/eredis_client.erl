@@ -46,8 +46,6 @@
           queue :: queue() | undefined
 }).
 
--define(SOCKET_OPTS, [binary, {active, once}, {packet, raw}, {reuseaddr, true}]).
-
 %%
 %% API
 %%
