@@ -46,10 +46,10 @@ Pipelining:
 
 Pubsub:
 
-    1> eredis_sub:sub_test().
+    1> eredis_sub:sub_example().
     received {subscribed,<<"foo">>,<0.34.0>}
     {<0.34.0>,<0.37.0>}
-    2> redis_sub:pub_test().
+    2> redis_sub:pub_example().
     received {message,<<"foo">>,<<"bar">>,<0.34.0>}
 
 
