@@ -26,12 +26,12 @@
 
 -export([init/0, parse/2]).
 
-%% Exported for testing
+-ifdef(TEST).
 -export([parse_bulk/1, parse_bulk/2,
          parse_multibulk/1, parse_multibulk/2]).
+-endif.
 
 -include_lib("eredis.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 %%
 %% API
