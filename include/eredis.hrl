@@ -3,7 +3,7 @@
 -type option() :: {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, integer()}.
 -type server_args() :: [option()].
 
--type return_value() :: binary() | [binary()].
+-type return_value() :: undefined | binary() | [binary()].
 
 -type pipeline() :: [iolist()].
 
