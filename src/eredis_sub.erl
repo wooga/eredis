@@ -14,7 +14,7 @@
          controlling_process/1, controlling_process/2, controlling_process/3,
          ack_message/1, subscribe/2, unsubscribe/2, channels/1]).
 
--export([psubscribe/2,punsubscribe/2])
+-export([psubscribe/2,punsubscribe/2]).
 
 -export([receiver/1, sub_example/0, pub_example/0]).
 
