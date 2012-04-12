@@ -253,8 +253,13 @@ reply({ok, [<<"psubscribe">>, Channel, _]}, State) ->
 
 reply({ok, [<<"unsubscribe">>, Channel, _]}, State) ->
     queue_or_send({unsubscribed, Channel, self()}, State);
+
+
+reply({ok, [<<"punsubscribe">>, Channel, _]}, State) ->
+    queue_or_send({unsubscribed, Channel, self()}, State);
 reply({ReturnCode, Value}, State) ->
     throw({unexpected_response_from_redis, ReturnCode, Value, State}).
+
 
 queue_or_send(Msg, State) ->
     case State#state.msg_state of
