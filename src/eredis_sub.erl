@@ -12,7 +12,7 @@
 
 -export([start_link/0, start_link/1, start_link/3, start_link/6, stop/1,
          controlling_process/1, controlling_process/2, controlling_process/3,
-         ack_message/1, subscribe/2, unsubscribe/2, channels/1]).
+         ack_message/1, subscribe/2, unsubscribe/2, channels/1,psubscribe/2]).
 
 -export([receiver/1, sub_example/0, pub_example/0]).
 
@@ -114,8 +114,20 @@ ack_message(Client) ->
 subscribe(Client, Channels) ->
     gen_server:cast(Client, {subscribe, self(), Channels}).
 
+%% @doc: Pattern subscribe to the given channels. Returns immediately. The
+%% result will be delivered to the controlling process as any other
+%% message. Delivers {subscribed, Channel::binary(), pid()}
+-spec subscribe(pid(), [channel()]) -> ok.
+psubscribe(Client, Channels) ->
+    gen_server:cast(Client, {psubscribe, self(), Channels}).
+
+
+
 unsubscribe(Client, Channels) ->
     gen_server:cast(Client, {unsubscribe, self(), Channels}).
+
+unsubscribe(Client, Channels) ->
+    gen_server:cast(Client, {punsubscribe, self(), Channels}).
 
 %% @doc: Returns the channels the given client is currently
 %% subscribing to. Note: this list is based on the channels at startup
