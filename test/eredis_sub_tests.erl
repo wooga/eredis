@@ -23,8 +23,10 @@ add_channels(Sub, Channels) ->
     ok = eredis_sub:subscribe(Sub, Channels),
     lists:foreach(
       fun (C) ->
-              receive M -> ?assertEqual({subscribed, C, Sub}, M)
-              after 1 -> ok end
+              receive M ->
+                      ?assertEqual({subscribed, C, Sub}, M),
+                      eredis_sub:ack_message(Sub)
+              end
       end, Channels).
 
 
@@ -236,8 +238,10 @@ add_channels_pattern(Sub, Channels) ->
     ok = eredis_sub:psubscribe(Sub, Channels),
     lists:foreach(
       fun (C) ->
-              receive M -> ?assertEqual({subscribed, C, Sub}, M)
-              after 50 -> ok end
+              receive M ->
+                      ?assertEqual({subscribed, C, Sub}, M),
+                      eredis_sub:ack_message(Sub)
+              end
       end, Channels).
 
 
@@ -258,13 +262,6 @@ pubsub_pattern_test() ->
             throw(timeout)
     end,
 
-    receive
-        Msg ->
-            throw({unexpected_message, Msg})
-    after 5 ->
-            ok
-    end,
-
     eredis_sub:punsubscribe(Sub, [<<"chan1*">> , <<"chan2*">>]),
     eredis_sub:ack_message(Sub),
     eredis_sub:ack_message(Sub),
@@ -272,6 +269,13 @@ pubsub_pattern_test() ->
     eredis_sub:ack_message(Sub),
     receive {unsubscribed,_,_} =  M3 -> ?assertEqual({unsubscribed, <<"chan2*">>, Sub}, M3) end,
     eredis_sub:ack_message(Sub),
+
+    ?assertEqual({ok, <<"0">>}, eredis:q(Pub, ["PUBLISH", <<"chan123">>, <<"msg">>])),
+    receive
+        Msg -> throw({unexpected_message, Msg})
+    after 10 ->
+            ok
+    end,
 
     eredis_sub:stop(Sub).
 
