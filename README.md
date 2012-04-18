@@ -52,6 +52,15 @@ Pubsub:
     2> redis_sub:pub_example().
     received {message,<<"foo">>,<<"bar">>,<0.34.0>}
 
+Pattern Subscribe:
+    
+    1> eredis_sub:psub_example(). 
+    received {subscribed,<<"foo*">>,<0.33.0>}
+    {<0.33.0>,<0.36.0>}
+    2> eredis_sub:ppub_example().
+    received {pmessage,<<"foo*">>,<<"foo123">>,<<"bar">>,<0.33.0>}
+    ok
+    3> 
 
 EUnit tests:
 
@@ -120,8 +129,9 @@ Subscriptions are managed using `eredis_sub:subscribe/2` and
 subscription, a message is sent to the controlling process for each
 channel.
 
-For now, channel patterns are not supported, but it is relatively easy
-to add support. Patches are welcome :)
+eredis also supports Pattern Subscribe using `eredis_sub:psubscribe/2`
+and `eredis_sub:unsubscribe/2`. As with normal subscriptions, a message
+is sent to the controlling process for each channel.
 
 ## AUTH and SELECT
 

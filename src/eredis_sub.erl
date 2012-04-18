@@ -18,6 +18,8 @@
 
 -export([receiver/1, sub_example/0, pub_example/0]).
 
+-export([psub_example/0,ppub_example/0]).
+
 %%
 %% PUBLIC API
 %%
@@ -161,7 +163,23 @@ sub_example() ->
                           end),
     {Sub, Receiver}.
 
+psub_example() ->
+    {ok, Sub} = start_link(),
+    Receiver = spawn_link(fun () ->
+                                  controlling_process(Sub),
+                                  psubscribe(Sub, [<<"foo*">>]),
+                                  receiver(Sub)
+                          end),
+    {Sub, Receiver}.
+
 pub_example() ->
     {ok, P} = eredis:start_link(),
     eredis:q(P, ["PUBLISH", "foo", "bar"]),
     eredis_client:stop(P).
+
+ppub_example() ->
+    {ok, P} = eredis:start_link(),
+    eredis:q(P, ["PUBLISH", "foo123", "bar"]),
+    eredis_client:stop(P).
+
+
