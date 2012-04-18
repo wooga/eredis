@@ -120,8 +120,9 @@ Subscriptions are managed using `eredis_sub:subscribe/2` and
 subscription, a message is sent to the controlling process for each
 channel.
 
-For now, channel patterns are not supported, but it is relatively easy
-to add support. Patches are welcome :)
+eredis also supports Pattern Subscribe using `eredis_sub:psubscribe/2`
+and `eredis_sub:unsubscribe/2`. As with normal subscriptions, a message
+is sent to the controlling process for each channel.
 
 ## AUTH and SELECT
 
