@@ -229,7 +229,6 @@ handle_response(Data, #state{parser_state = ParserState} = State) ->
             handle_response(Rest, NewState);
 
         {continue, NewParserState} ->
-            inet:setopts(State#state.socket, [{active, once}]),
             State#state{parser_state = NewParserState}
     end.
 
