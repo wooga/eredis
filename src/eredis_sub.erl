@@ -14,7 +14,11 @@
          controlling_process/1, controlling_process/2, controlling_process/3,
          ack_message/1, subscribe/2, unsubscribe/2, channels/1]).
 
+-export([psubscribe/2,punsubscribe/2]).
+
 -export([receiver/1, sub_example/0, pub_example/0]).
+
+-export([psub_example/0,ppub_example/0]).
 
 %%
 %% PUBLIC API
@@ -114,8 +118,20 @@ ack_message(Client) ->
 subscribe(Client, Channels) ->
     gen_server:cast(Client, {subscribe, self(), Channels}).
 
+%% @doc: Pattern subscribe to the given channels. Returns immediately. The
+%% result will be delivered to the controlling process as any other
+%% message. Delivers {subscribed, Channel::binary(), pid()}
+-spec psubscribe(pid(), [channel()]) -> ok.
+psubscribe(Client, Channels) ->
+    gen_server:cast(Client, {psubscribe, self(), Channels}).
+
+
+
 unsubscribe(Client, Channels) ->
     gen_server:cast(Client, {unsubscribe, self(), Channels}).
+
+punsubscribe(Client, Channels) ->
+    gen_server:cast(Client, {punsubscribe, self(), Channels}).
 
 %% @doc: Returns the channels the given client is currently
 %% subscribing to. Note: this list is based on the channels at startup
@@ -147,7 +163,23 @@ sub_example() ->
                           end),
     {Sub, Receiver}.
 
+psub_example() ->
+    {ok, Sub} = start_link(),
+    Receiver = spawn_link(fun () ->
+                                  controlling_process(Sub),
+                                  psubscribe(Sub, [<<"foo*">>]),
+                                  receiver(Sub)
+                          end),
+    {Sub, Receiver}.
+
 pub_example() ->
     {ok, P} = eredis:start_link(),
     eredis:q(P, ["PUBLISH", "foo", "bar"]),
     eredis_client:stop(P).
+
+ppub_example() ->
+    {ok, P} = eredis:start_link(),
+    eredis:q(P, ["PUBLISH", "foo123", "bar"]),
+    eredis_client:stop(P).
+
+

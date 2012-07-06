@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v1.0.2
+
+* Fixed bug in eredis_sub where the socket was incorrectly set to
+  `{active, once}` twice. At large volumes of messages, this resulted
+  in too many messages from the socket and we would be unable to keep
+  up.
+
 ## v1.0
 
 * Support added for pubsub thanks to Dave Peticolas

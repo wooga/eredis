@@ -112,12 +112,31 @@ handle_cast({subscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} =
     ok = gen_tcp:send(State#state.socket, Command),
     {noreply, State#state{channels = Channels ++ State#state.channels}};
 
+
+handle_cast({psubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
+    Command = eredis:create_multibulk(["PSUBSCRIBE" | Channels]),
+    ok = gen_tcp:send(State#state.socket, Command),
+    {noreply, State#state{channels = Channels ++ State#state.channels}};
+
+
+
 handle_cast({unsubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
     Command = eredis:create_multibulk(["UNSUBSCRIBE" | Channels]),
     ok = gen_tcp:send(State#state.socket, Command),
     NewChannels = lists:foldl(fun (C, Cs) -> lists:delete(C, Cs) end,
                               State#state.channels, Channels),
     {noreply, State#state{channels = NewChannels}};
+
+
+
+handle_cast({punsubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
+    Command = eredis:create_multibulk(["PUNSUBSCRIBE" | Channels]),
+    ok = gen_tcp:send(State#state.socket, Command),
+    NewChannels = lists:foldl(fun (C, Cs) -> lists:delete(C, Cs) end,
+                              State#state.channels, Channels),
+    {noreply, State#state{channels = NewChannels}};
+
+
 
 handle_cast({ack_message, _}, State) ->
     {noreply, State};
@@ -210,7 +229,6 @@ handle_response(Data, #state{parser_state = ParserState} = State) ->
             handle_response(Rest, NewState);
 
         {continue, NewParserState} ->
-            inet:setopts(State#state.socket, [{active, once}]),
             State#state{parser_state = NewParserState}
     end.
 
@@ -219,12 +237,28 @@ handle_response(Data, #state{parser_state = ParserState} = State) ->
 %% for later delivery.
 reply({ok, [<<"message">>, Channel, Message]}, State) ->
     queue_or_send({message, Channel, Message, self()}, State);
+
+reply({ok, [<<"pmessage">>, Pattern, Channel, Message]}, State) ->
+    queue_or_send({pmessage, Pattern, Channel, Message, self()}, State);
+
+
+
 reply({ok, [<<"subscribe">>, Channel, _]}, State) ->
     queue_or_send({subscribed, Channel, self()}, State);
+
+reply({ok, [<<"psubscribe">>, Channel, _]}, State) ->
+    queue_or_send({subscribed, Channel, self()}, State);
+
+
 reply({ok, [<<"unsubscribe">>, Channel, _]}, State) ->
+    queue_or_send({unsubscribed, Channel, self()}, State);
+
+
+reply({ok, [<<"punsubscribe">>, Channel, _]}, State) ->
     queue_or_send({unsubscribed, Channel, self()}, State);
 reply({ReturnCode, Value}, State) ->
     throw({unexpected_response_from_redis, ReturnCode, Value, State}).
+
 
 queue_or_send(Msg, State) ->
     case State#state.msg_state of
