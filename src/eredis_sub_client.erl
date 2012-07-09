@@ -180,6 +180,7 @@ handle_info({tcp_closed, _Socket}, State) ->
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
     send_to_controller({eredis_connected, self()}, State),
+    inet:setopts(Socket, [{active, once}]),
     {noreply, State#state{socket = Socket}};
 
 %% Our controlling process is down.
