@@ -29,7 +29,7 @@
 -spec start_link(Host::list(),
                  Port::integer(),
                  Password::string(),
-                 ReconnectSleep::integer(),
+                 ReconnectSleep::reconnect_sleep(),
                  MaxQueueSize::integer(),
                  QueueBehaviour::drop | exit) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
@@ -164,9 +164,13 @@ handle_info({tcp, _Socket, Bs}, State) ->
     end;
 
 %% Socket got closed, for example by Redis terminating idle
-%% clients. Spawn of a new process which will try to reconnect and
+%% clients. If desired, spawn of a new process which will try to reconnect and
 %% notify us when Redis is ready. In the meantime, we can respond with
 %% an error message to all our clients.
+handle_info({tcp_closed, _Socket}, #state{reconnect_sleep = no_reconnect} = State) ->
+    %% If we aren't going to reconnect, then there is nothing else for this process to do.
+    {stop, normal, State#state{socket = undefined}};
+
 handle_info({tcp_closed, _Socket}, State) ->
     Self = self(),
     send_to_controller({eredis_disconnected, Self}, State),

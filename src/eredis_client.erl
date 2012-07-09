@@ -39,7 +39,7 @@
           port :: integer() | undefined,
           password :: binary() | undefined,
           database :: binary() | undefined,
-          reconnect_sleep :: integer() | undefined,
+          reconnect_sleep :: reconnect_sleep() | undefined,
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
@@ -54,7 +54,7 @@
                  Port::integer(),
                  Database::integer(),
                  Password::string(),
-                 ReconnectSleep::integer()) ->
+                 ReconnectSleep::reconnect_sleep()) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
 start_link(Host, Port, Database, Password, ReconnectSleep) ->
     gen_server:start_link(?MODULE, [Host, Port, Database, Password, ReconnectSleep], []).
@@ -106,9 +106,13 @@ handle_info({tcp, _Socket, Bs}, State) ->
     {noreply, handle_response(Bs, State)};
 
 %% Socket got closed, for example by Redis terminating idle
-%% clients. Spawn of a new process which will try to reconnect and
+%% clients. If desired, spawn of a new process which will try to reconnect and
 %% notify us when Redis is ready. In the meantime, we can respond with
 %% an error message to all our clients.
+handle_info({tcp_closed, _Socket}, #state{reconnect_sleep = no_reconnect} = State) ->
+    %% If we aren't going to reconnect, then there is nothing else for this process to do.
+    {stop, normal, State#state{socket = undefined}};
+
 handle_info({tcp_closed, _Socket}, State) ->
     Self = self(),
     spawn(fun() -> reconnect_loop(Self, State) end),

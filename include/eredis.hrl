@@ -1,6 +1,8 @@
 %% Public types
 
--type option() :: {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, integer()}.
+-type reconnect_sleep() :: no_reconnect | integer().
+
+-type option() :: {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, reconnect_sleep()}.
 -type server_args() :: [option()].
 
 -type return_value() :: undefined | binary() | [binary()].

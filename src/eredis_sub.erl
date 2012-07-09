@@ -35,7 +35,7 @@ start_link(Host, Port, Password, ReconnectSleep,
   when is_list(Host) andalso
        is_integer(Port) andalso
        is_list(Password) andalso
-       is_integer(ReconnectSleep) andalso
+       is_integer(ReconnectSleep) orelse ReconnectSleep =:= no_reconnect andalso
        (is_integer(MaxQueueSize) orelse MaxQueueSize =:= infinity) andalso
        (QueueBehaviour =:= drop orelse QueueBehaviour =:= exit) ->
 
