@@ -1,11 +1,17 @@
 # CHANGELOG
 
+## v1.0.3
+
+* Fixed bug in eredis_sub where when the connection to Redis was lost,
+  the socket would not be set into {active, once} on reconnect. Thanks
+  to georgeye for the patch.
+
 ## v1.0.2
 
 * Fixed bug in eredis_sub where the socket was incorrectly set to
   `{active, once}` twice. At large volumes of messages, this resulted
   in too many messages from the socket and we would be unable to keep
-  up.
+  up. Thanks to pmembrey for reporting.
 
 ## v1.0
 
