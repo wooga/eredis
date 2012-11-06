@@ -305,7 +305,7 @@ do_sync_command(Socket, Command) ->
     case gen_tcp:send(Socket, Command) of
         ok ->
             %% Hope there's nothing else coming down on the socket..
-            case gen_tcp:recv(Socket, 0) of
+            case gen_tcp:recv(Socket, 0, ?RECV_TIMEOUT) of
                 {ok, <<"+OK\r\n">>} ->
                     ok;
                 Other ->
