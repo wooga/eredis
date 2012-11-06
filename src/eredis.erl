@@ -42,7 +42,7 @@ start_link(Host, Port, Database, Password, ReconnectSleep)
        is_integer(Port);
        is_integer(Database);
        is_list(Password);
-       is_integer(ReconnectSleep) ->
+       is_integer(ReconnectSleep) orelse ReconnectSleep =:= no_reconnect ->
 
     eredis_client:start_link(Host, Port, Database, Password, ReconnectSleep).
 
