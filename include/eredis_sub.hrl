@@ -3,7 +3,7 @@
           host :: string() | undefined,
           port :: integer() | undefined,
           password :: binary() | undefined,
-          reconnect_sleep :: integer() | undefined,
+          reconnect_sleep :: integer() | undefined | no_reconnect,
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,

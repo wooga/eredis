@@ -30,7 +30,7 @@
                  Port::integer(),
                  Password::string(),
                  ReconnectSleep::reconnect_sleep(),
-                 MaxQueueSize::integer(),
+                 MaxQueueSize::integer() | infinity,
                  QueueBehaviour::drop | exit) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
 start_link(Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour) ->
