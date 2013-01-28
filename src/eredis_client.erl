@@ -105,6 +105,10 @@ handle_info({tcp, _Socket, Bs}, State) ->
     inet:setopts(State#state.socket, [{active, once}]),
     {noreply, handle_response(Bs, State)};
 
+handle_info({tcp_error, _Socket, _Reason}, State) ->
+    %% This will be followed by a close
+    {noreply, State};
+
 %% Socket got closed, for example by Redis terminating idle
 %% clients. If desired, spawn of a new process which will try to reconnect and
 %% notify us when Redis is ready. In the meantime, we can respond with
