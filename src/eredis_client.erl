@@ -97,6 +97,14 @@ handle_call(_Request, _From, State) ->
     {reply, unknown_request, State}.
 
 
+handle_cast({request, Req}, State) ->
+    case do_request(Req, undefined, State) of
+        {reply, _Reply, State1} ->
+            {noreply, State1};
+        {noreply, State1} ->
+            {noreply, State1}
+    end;
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -220,10 +228,10 @@ handle_response(Data, #state{parser_state = ParserState,
 reply(Value, Queue) ->
     case queue:out(Queue) of
         {{value, {1, From}}, NewQueue} ->
-            gen_server:reply(From, Value),
+            safe_reply(From, Value),
             NewQueue;
         {{value, {1, From, Replies}}, NewQueue} ->
-            gen_server:reply(From, lists:reverse([Value | Replies])),
+            safe_reply(From, lists:reverse([Value | Replies])),
             NewQueue;
         {{value, {N, From, Replies}}, NewQueue} when N > 1 ->
             queue:in_r({N - 1, From, [Value | Replies]}, NewQueue);
@@ -233,6 +241,10 @@ reply(Value, Queue) ->
             throw(empty_queue)
     end.
 
+safe_reply(undefined, _Value) ->
+    ok;
+safe_reply(From, Value) ->
+    gen_server:reply(From, Value).
 
 %% @doc: Helper for connecting to Redis, authenticating and selecting
 %% the correct database. These commands are synchronous and if Redis
