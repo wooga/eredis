@@ -101,6 +101,12 @@ pipeline_mixed_test() ->
     timer:sleep(10),
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", c, d])).
 
+q_noreply_test() ->
+    C = c(),
+    ?assertEqual(ok, eredis:q_noreply(C, ["GET", foo])),
+    ?assertEqual(ok, eredis:q_noreply(C, ["SET", foo, bar])),
+    %% Even though q_noreply doesn't wait, it is sent before subsequent requests:
+    ?assertEqual({ok, <<"bar">>}, eredis:q(C, ["GET", foo])).
 
 c() ->
     Res = eredis:start_link(),
