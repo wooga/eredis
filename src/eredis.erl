@@ -16,7 +16,7 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, stop/1, q/2, q/3, qp/2, qp/3, q_async/2]).
+         start_link/5, stop/1, q/2, q/3, qp/2, qp/3, q_noreply/2]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -86,11 +86,11 @@ qp(Client, Pipeline) ->
 qp(Client, Pipeline, Timeout) ->
     pipeline(Client, Pipeline, Timeout).
 
--spec q_async(Client::pid(), Command::iolist()) -> ok.
+-spec q_noreply(Client::pid(), Command::iolist()) -> ok.
 %% @doc
 %% @see q/2
 %% Executes the command but does not wait for a response and ignores any errors.
-q_async(Client, Command) ->
+q_noreply(Client, Command) ->
     cast(Client, Command).
 
 %%
