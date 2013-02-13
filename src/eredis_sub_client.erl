@@ -282,9 +282,9 @@ queue_or_send(Msg, State) ->
 %% synchronous and if Redis returns something we don't expect, we
 %% crash. Returns {ok, State} or {SomeError, Reason}.
 connect(State) ->
-    case gen_tcp:connect(State#state.host, State#state.port, ?SOCKET_OPTS) of
+    SockOpts = [binary, {active, false}, {packet, raw}, {reuseaddr, true}],
+    case gen_tcp:connect(State#state.host, State#state.port, SockOpts) of
         {ok, Socket} ->
-            inet:setopts(Socket, [{active, false}]),
             case authenticate(Socket, State#state.password) of
                 ok ->
                     {ok, State#state{socket = Socket}};
