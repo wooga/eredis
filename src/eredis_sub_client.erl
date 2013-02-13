@@ -56,8 +56,12 @@ init([Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour]) ->
 
     case connect(State) of
         {ok, NewState} ->
-            inet:setopts(NewState#state.socket, [{active, once}]),
-            {ok, NewState};
+            case set_active_once(NewState#state.socket) of
+                ok ->
+                    {ok, NewState};
+                {error, Reason} ->
+                    {stop, Reason}
+            end;
         {error, Reason} ->
             {stop, {connection_error, Reason}}
     end.
@@ -145,20 +149,24 @@ handle_cast(_Msg, State) ->
 
 %% Receive data from socket, see handle_response/2
 handle_info({tcp, _Socket, Bs}, State) ->
-    inet:setopts(State#state.socket, [{active, once}]),
-    NewState = handle_response(Bs, State),
-    case queue:len(NewState#state.msg_queue) > NewState#state.max_queue_size of
-        true ->
-            case State#state.queue_behaviour of
-                drop ->
-                    Msg = {dropped, queue:len(NewState#state.msg_queue)},
-                    send_to_controller(Msg, NewState),
-                    {noreply, NewState#state{msg_queue = queue:new()}};
-                exit ->
-                    {stop, max_queue_size, State}
+    case set_active_once(State#state.socket) of
+        ok ->
+            NewState = handle_response(Bs, State),
+            case queue:len(NewState#state.msg_queue) > NewState#state.max_queue_size of
+                true ->
+                    case State#state.queue_behaviour of
+                        drop ->
+                            Msg = {dropped, queue:len(NewState#state.msg_queue)},
+                            send_to_controller(Msg, NewState),
+                            {noreply, NewState#state{msg_queue = queue:new()}};
+                        exit ->
+                            {stop, max_queue_size, State}
+                    end;
+                false ->
+                    {noreply, NewState}
             end;
-        false ->
-            {noreply, NewState}
+        {error, Reason} ->
+            {stop, Reason, State}
     end;
 
 handle_info({tcp_error, _Socket, _Reason}, State) ->
@@ -186,8 +194,12 @@ handle_info({tcp_closed, _Socket}, State) ->
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
     send_to_controller({eredis_connected, self()}, State),
-    inet:setopts(Socket, [{active, once}]),
-    {noreply, State#state{socket = Socket}};
+    case set_active_once(Socket) of
+        ok ->
+            {noreply, State#state{socket = Socket}};
+        {error, Reason} ->
+            {stop, Reason, State}
+    end;
 
 %% Our controlling process is down.
 handle_info({'DOWN', Ref, process, Pid, _Reason},
@@ -342,3 +354,12 @@ send_to_controller(_Msg, #state{controlling_process=undefined}) ->
 send_to_controller(Msg, #state{controlling_process={_Ref, Pid}}) ->
     %%error_logger:info_msg("~p ! ~p~n", [Pid, Msg]),
     Pid ! Msg.
+
+set_active_once(Socket) ->
+    case inet:setopts(Socket, [{active, once}]) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            {error, {set_active_once, Reason}}
+    end.
+
