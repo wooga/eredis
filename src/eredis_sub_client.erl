@@ -292,7 +292,7 @@ queue_or_send(Msg, State) ->
 
 %% @doc: Helper for connecting to Redis. These commands are
 %% synchronous and if Redis returns something we don't expect, we
-%% crash. Returns {ok, State} or {SomeError, Reason}.
+%% crash. Returns {ok, State} or {error, Reason}.
 connect(State) ->
     SockOpts = [binary, {active, false}, {packet, raw}, {reuseaddr, true}],
     case gen_tcp:connect(State#state.host, State#state.port, SockOpts) of
