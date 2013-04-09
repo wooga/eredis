@@ -38,10 +38,10 @@ start_link(Host, Port,  Database, Password) ->
     start_link(Host, Port, Database, Password, 100).
 
 start_link(Host, Port, Database, Password, ReconnectSleep)
-  when is_list(Host);
-       is_integer(Port);
-       is_integer(Database);
-       is_list(Password);
+  when is_list(Host),
+       is_integer(Port),
+       is_integer(Database),
+       is_list(Password),
        is_integer(ReconnectSleep) orelse ReconnectSleep =:= no_reconnect ->
 
     eredis_client:start_link(Host, Port, Database, Password, ReconnectSleep).
