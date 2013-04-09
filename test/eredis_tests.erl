@@ -126,3 +126,6 @@ multibulk_test_() ->
      ?_assertThrow({cannot_store_floats, 123.5},
                    list_to_binary(create_multibulk(['SET', foo, 123.5])))
     ].
+
+undefined_database_test() ->
+    ?assertMatch({ok,_}, eredis:start_link("localhost", 6379, undefined)).

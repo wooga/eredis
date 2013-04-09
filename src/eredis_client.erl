@@ -52,7 +52,7 @@
 
 -spec start_link(Host::list(),
                  Port::integer(),
-                 Database::integer(),
+                 Database::integer() | undefined,
                  Password::string(),
                  ReconnectSleep::reconnect_sleep()) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
@@ -70,7 +70,7 @@ stop(Pid) ->
 init([Host, Port, Database, Password, ReconnectSleep]) ->
     State = #state{host = Host,
                    port = Port,
-                   database = list_to_binary(integer_to_list(Database)),
+                   database = read_database(Database),
                    password = list_to_binary(Password),
                    reconnect_sleep = ReconnectSleep,
 
@@ -268,6 +268,8 @@ connect(State) ->
             {error, {connection_error, Reason}}
     end.
 
+select_database(_Socket, undefined) ->
+    ok;
 select_database(Socket, Database) ->
     do_sync_command(Socket, ["SELECT", " ", Database, "\r\n"]).
 
@@ -312,3 +314,8 @@ reconnect_loop(Client, #state{reconnect_sleep = ReconnectSleep} = State) ->
             timer:sleep(ReconnectSleep),
             reconnect_loop(Client, State)
     end.
+
+read_database(undefined) ->
+    undefined;
+read_database(Database) when is_integer(Database) ->
+    list_to_binary(integer_to_list(Database)).
