@@ -23,7 +23,8 @@ get_master(Pid, MasterName) when is_pid(Pid), is_atom(MasterName) ->
         Result ->
             Result
     catch Type:Error ->
-            {error, ?SENTINEL_UNREACHABLE}
+       error_logger:error_msg("Sentinel error getting master ~p : ~p:~p", [MasterName, Type, Error]),
+       {error, ?SENTINEL_UNREACHABLE}
     end.
 
 

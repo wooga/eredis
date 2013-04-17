@@ -133,7 +133,7 @@ handle_info({'EXIT', _Pid, _Reason}, S) ->
 handle_info(_Info, State) ->
     {stop, {unhandled_message, _Info}, State}.
 
-terminate(_Reason, State) ->
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -160,7 +160,7 @@ read_sentinel({Host,Port}) when is_list(Host), is_integer(Port) ->
     {ok, {master_host(), master_port()}, #state{}} | {error, any(), #state{}}.
 
 %% All sentinels return errors
-query_master(MasterName, #state{errors=Errors,sentinels=Sentinels} = S)
+query_master(_MasterName, #state{errors=Errors,sentinels=Sentinels} = S)
   when Errors#errors.total >= length(Sentinels) ->
     #errors{sentinel_unreachable=SU, master_unknown=MUK, master_unreachable=MUR} = Errors,
     if
@@ -212,8 +212,6 @@ update_errors(E, #errors{sentinel_unreachable=SU, master_unknown=MUK, master_unr
 
 rotate([])     ->    [];
 rotate([X|Xs]) -> Xs ++ [X].
-
-all(Ts) -> lists:all(fun(T) -> T end, Ts).
 
 
 %%% Unit tests --------------------------------------------------------

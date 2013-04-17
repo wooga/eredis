@@ -76,7 +76,10 @@ tests() ->
 
      {timeout, 30,
       {"it returns new master host/port on redis failover",
-       fun t_failover/0}}
+       fun t_failover/0}},
+
+     {"eredis should understand sentine:master_name notation",
+      fun t_eredis_support/0}
 
     ].
 
@@ -122,17 +125,32 @@ t_failed_sentinel() ->
     ?assertMatch({ok, {"127.0.0.1", 6380}}, eredis_sentinel:get_master(session)),
     ?assertMatch({ok, {"localhost", 26381, _}}, eredis_sentinel:get_current_sentinel()).
 
+t_eredis_support() ->
+    {ok, _Pid} = eredis_sentinel:start_link(?CONFIG),
+    {ok, Conn} = eredis:start_link("sentinel:session", 0),
+    ?assertMatch({ok,[<<"port">>, <<"6380">>]}, eredis:q(Conn, ["config", "get", "port"])),
+    {ok, Conn2} = eredis:start_link("sentinel:cache", 0),
+    ?assertMatch({ok,[<<"port">>, <<"6382">>]}, eredis:q(Conn2, ["config", "get", "port"])).
+
+
 t_failover() ->
     {ok,_Pid} = eredis_sentinel:start_link(?CONFIG),
     ?assertMatch({ok, {"127.0.0.1", 6380}}, eredis_sentinel:get_master(session, true)),
-    % this sleep need to sentinels finds out slaves of master
+    {ok, Conn} = eredis:start_link("sentinel:session", 0),
+    ?assertMatch({ok,[<<"port">>, <<"6380">>]}, eredis:q(Conn, ["config", "get", "port"])),
+
+    % this sleep need to sentinels find out slaves of master
     timer:sleep(1000),
     % just change master, not kill it because real failover need up to 35 seconds to complete
     change_master(6380,6381),
     % waiting sentinels to see new master
     timer:sleep(2000),
     ?assertMatch({ok, {"127.0.0.1", 6381}}, eredis_sentinel:get_master(session)),
-    ?assertMatch([{sentinel, {reconnect, session, "127.0.0.1", 6381}}], get_messages()).
+    ?assertMatch([{sentinel, {reconnect, session, "127.0.0.1", 6381}}], get_messages()),
+    ?assert(is_process_alive(Conn)),
+    wait_redis_connect(Conn, 2000),
+    ?assertMatch({ok,[<<"port">>, <<"6381">>]}, eredis:q(Conn, ["config", "get", "port"])).
+
 
 
 %%% Internal ----------------------------------------------------------
@@ -151,30 +169,43 @@ get_messages(Acc) ->
 
 kill_servers(Names, Timeout) ->
     [kill_server(N) || N <- Names],
-    wait_or_die(Names, [], Timeout).
+    wait_server_die(Names, [], Timeout).
 
 kill_server(Name) ->
     Cmd = lists:flatten(io_lib:format("kill $(cat ./redis_~s.pid)", [Name])),
     os:cmd(Cmd).
 
-wait_or_die(Names, Acc, Timeout) when Timeout =< 0 ->
+wait_server_die(Names, Acc, Timeout) when Timeout =< 0 ->
     throw({"Killing servers timeout", Names++Acc});
-wait_or_die([], [], _) ->
+wait_server_die([], [], _) ->
     ok;
-wait_or_die([], Names, Timeout) ->
+wait_server_die([], Names, Timeout) ->
     timer:sleep(100),
     kill_servers(Names, Timeout - 100);
-wait_or_die([Name|Names], Acc, Timeout) ->
+wait_server_die([Name|Names], Acc, Timeout) ->
     case is_server_alive(Name) of
         true ->
-            wait_or_die(Names, [Name | Acc ], Timeout);
+            wait_server_die(Names, [Name | Acc ], Timeout);
         _ ->
-            wait_or_die(Names, Acc, Timeout)
+            wait_server_die(Names, Acc, Timeout)
     end.
 
 is_server_alive(Name) ->
     Cmd = lists:flatten(io_lib:format("kill -0 $(cat ./redis_~s.pid) && echo -n ok", [Name])),
     "ok" == os:cmd(Cmd).
+
+
+%% Waiting redis client to connect to redis
+wait_redis_connect(Conn, Timeout) when Timeout =< 0 ->
+    {error, "Waiting redis connection timeout"};
+wait_redis_connect(Conn, Timeout) ->
+    case eredis:q(Conn, ["PING"]) of
+        {error, no_connection} ->
+            timer:sleep(100),
+            wait_redis_connect(Conn, Timeout - 100);
+        {ok,<<"PONG">>} ->
+            ok
+    end.
 
 %% Failover imitation
 
