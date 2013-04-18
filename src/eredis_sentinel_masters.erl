@@ -86,14 +86,13 @@ set_master(Masters, Master) ->
 update_master(#master{host=Host, port=Port}=Master, Host, Port) ->
     Master;
 update_master(Master, Host, Port) ->
-    MasterNew = Master#master{host=Host,port=Port},
-    notify_pids(MasterNew),
-    MasterNew.
+    notify_pids(Master#master{host=Host,port=Port}).
 
-notify_pids(#master{pids=Pids, name=Name, host=Host, port=Port}) ->
+-spec notify_pids(#master{}) -> #master{}.
+notify_pids(#master{pids=Pids, name=Name, host=Host, port=Port}=Master) ->
     Message = {sentinel, {reconnect, Name, Host, Port}},
-    [ P ! Message || P <- Pids],
-    ok.
+    NewPids = [ begin Pid ! Message, Pid end || Pid <- Pids, is_process_alive(Pid) ],
+    Master#master{pids=NewPids}.
 
 add_pid(#master{pids=Pids} = Master, Pid) ->
     Master#master{pids = lists:umerge(Pids, [Pid])}.
@@ -169,13 +168,23 @@ unsubscribe_test() ->
 
 update_notify_test() ->
     Pid = self(),
+    PidFailed = spawn(fun() -> ok end),
+    exit(PidFailed, kill),
+    ?assert(is_process_alive(PidFailed) == false),
+
     {ok, Ms1} = subscribe(two_masters(), master1, Pid),
-    {ok, Ms2} = update(Ms1, master1, "host1", 1),
+    {ok, Ms11} = subscribe(Ms1, master1, PidFailed),
+    {ok, Ms2} = update(Ms11, master1, "host1", 1),
     ?assertMatch([], get_messages()),
+    {ok,Master1} = find(Ms2, master1),
+    ?assertMatch(true, lists:member(PidFailed, Master1#master.pids)),
 
     {ok, Ms3} = update(Ms2, master1, "host11", 1),
     ?assertMatch(ok, get_message({sentinel, {reconnect, master1, "host11", 1}})),
     ?assertMatch([], get_messages()),
+    %% non alive pids should be removed from pids
+    {ok,Master11} = find(Ms3, master1),
+    ?assertMatch(false, lists:member(PidFailed, Master11#master.pids)),
 
     {ok, _} = update(Ms3, master1, "host11", 2),
     ?assertMatch(ok, get_message({sentinel, {reconnect, master1, "host11", 2}})),
