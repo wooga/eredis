@@ -127,17 +127,19 @@ about current master instance.
 ### Working with sentinels
 
 To enable sentinel support for eredis app:
-1. Start eredis_sentinel main process under supervisor with list of all sentinels as argument:
 
-    > eredis_sentinel:start_link([{"host1.lan", 20367}, {"host2.lan", 20367}]).
+Start eredis_sentinel main process under supervisor with list of all sentinels as argument:
 
-2. When starting eredis clients use string `sentinel:master_name` instead host:
+    eredis_sentinel:start_link([{"host1.lan", 20367}, {"host2.lan", 20367}]).
 
-    > eredis:start_link("sentinel:mymaster", 0).
+
+When starting eredis clients use string `sentinel:master_name` instead host:
+
+    eredis:start_link("sentinel:mymaster", 0).
 
 Port is ignored in this case, but needed as eredis:start_link/1 is a special form used in poolboy integration.
 
-Eredis client will ask `eredis_sentinel` about current master for mymaster cluster and
+`eredis_client` process will ask `eredis_sentinel` about current master for `mymaster` cluster and
 connect to it. `eredis_sentinel` also tracks all clients and in case that master changes
 it will send notifications to all interested clients.
 
