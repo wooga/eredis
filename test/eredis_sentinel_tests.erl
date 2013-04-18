@@ -30,13 +30,12 @@ stop_cluster(_) ->
 
 %%% Working with redis cluster
 start_redis(Name) ->
-    run_cmd("redis-server ~s/redis_~s.conf", [code:priv_dir(eredis),Name]).
+    run_cmd("redis-server ~s/redis_~s.conf", [code:priv_dir(eredis),Name]),
+    ?assert(is_server_alive(Name)).
 
 start_sentinel(Name) ->
-    run_cmd("redis-sentinel ~p/redis_~s.conf ", [code:priv_dir(eredis), Name]).
-
-server(Name) ->
-    proplists:lookup(Name, ?SERVERS ++ ?SENTINELS).
+    run_cmd("redis-sentinel ~p/redis_~s.conf ", [code:priv_dir(eredis), Name]),
+    ?assert(is_server_alive(Name)).
 
 run_cmd(CmdFmt, Args) ->
     Cmd = lists:flatten(io_lib:format(CmdFmt, Args)),
@@ -45,14 +44,21 @@ run_cmd(CmdFmt, Args) ->
 %%% Test definition
 
 sentinel_test_() ->
-    error_logger:tty(false),
-    Ts =
-        [{setup,
-          fun start_cluster/0,
-          fun stop_cluster/1,
-          T
-         } || T <- tests() ],
-    {inorder, Ts}.
+    case check_env() of
+        ok ->
+            error_logger:tty(false),
+            Ts =
+                [{setup,
+                  fun start_cluster/0,
+                  fun stop_cluster/1,
+                  T
+                 } || T <- tests() ],
+            {inorder, Ts};
+        {error, Error} ->
+            [fun() ->
+                     ?debugFmt("~n~nWARNING! SENTINEL TESTS ARE SKIPPED!~nError: ~s~n", [Error])
+             end]
+    end.
 
 tests() ->
     [
@@ -196,7 +202,7 @@ is_server_alive(Name) ->
 
 
 %% Waiting redis client to connect to redis
-wait_redis_connect(Conn, Timeout) when Timeout =< 0 ->
+wait_redis_connect(_Conn, Timeout) when Timeout =< 0 ->
     {error, "Waiting redis connection timeout"};
 wait_redis_connect(Conn, Timeout) ->
     case eredis:q(Conn, ["PING"]) of
@@ -208,10 +214,26 @@ wait_redis_connect(Conn, Timeout) ->
     end.
 
 %% Failover imitation
-
 change_master(FromPort, ToPort) ->
     {ok, From} = eredis:start_link("localhost", FromPort),
     {ok, To} = eredis:start_link("localhost", ToPort),
     eredis:q(To, ["slaveof", "no", "one"]),
     eredis:q(From, ["slaveof", "localhost", ToPort]),
     ok.
+
+%% Check that sentinel tests can be run
+check_env() ->
+    case {check_prog("redis-server"),check_prog("redis-sentinel")} of
+        {"",""} ->
+            ok;
+        {E1, E2} ->
+            {error, string:join([E || E <- [E1,E2], E =/= []], "\n")}
+    end.
+
+check_prog(ProgName) ->
+    case os:cmd("which " ++ ProgName) of
+        [] ->
+            ProgName ++ " not found";
+        _ ->
+            ""
+    end.
