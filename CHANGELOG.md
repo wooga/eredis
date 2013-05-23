@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v1.0.4
+
+* Added `eredis:q_noreply/2` which sends a fire-and-forget request to
+  Redis. Thanks to Ransom Richardson for the patch.
+
+* Various type annotation improvements, typo fixes and robustness
+  improvements. Thanks to Michael Gregson, Matthew Conway and Ransom
+  Richardson.
+
 ## v1.0.3
 
 * Fixed bug in eredis_sub where when the connection to Redis was lost,

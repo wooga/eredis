@@ -101,6 +101,12 @@ pipeline_mixed_test() ->
     timer:sleep(10),
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", c, d])).
 
+q_noreply_test() ->
+    C = c(),
+    ?assertEqual(ok, eredis:q_noreply(C, ["GET", foo])),
+    ?assertEqual(ok, eredis:q_noreply(C, ["SET", foo, bar])),
+    %% Even though q_noreply doesn't wait, it is sent before subsequent requests:
+    ?assertEqual({ok, <<"bar">>}, eredis:q(C, ["GET", foo])).
 
 c() ->
     Res = eredis:start_link(),
@@ -120,3 +126,6 @@ multibulk_test_() ->
      ?_assertThrow({cannot_store_floats, 123.5},
                    list_to_binary(create_multibulk(['SET', foo, 123.5])))
     ].
+
+undefined_database_test() ->
+    ?assertMatch({ok,_}, eredis:start_link("localhost", 6379, undefined)).
