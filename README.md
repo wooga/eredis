@@ -25,46 +25,57 @@ copy and paste the following into a shell to try out Eredis:
 
 MSET and MGET:
 
-    KeyValuePairs = ["key1", "value1", "key2", "value2", "key3", "value3"].
-    {ok, <<"OK">>} = eredis:q(C, ["MSET" | KeyValuePairs]).
-    {ok, Values} = eredis:q(C, ["MGET" | ["key1", "key2", "key3"]]).
+```erlang
+KeyValuePairs = ["key1", "value1", "key2", "value2", "key3", "value3"].
+{ok, <<"OK">>} = eredis:q(C, ["MSET" | KeyValuePairs]).
+{ok, Values} = eredis:q(C, ["MGET" | ["key1", "key2", "key3"]]).
+```
 
 Transactions:
 
-    {ok, <<"OK">>} = eredis:q(C, ["MULTI"]).
-    {ok, <<"QUEUED">>} = eredis:q(C, ["SET", "foo", "bar"]).
-    {ok, <<"QUEUED">>} = eredis:q(C, ["SET", "bar", "baz"]).
-    {ok, [<<"OK">>, <<"OK">>]} = eredis:q(C, ["EXEC"]).
+```erlang
+{ok, <<"OK">>} = eredis:q(C, ["MULTI"]).
+{ok, <<"QUEUED">>} = eredis:q(C, ["SET", "foo", "bar"]).
+{ok, <<"QUEUED">>} = eredis:q(C, ["SET", "bar", "baz"]).
+{ok, [<<"OK">>, <<"OK">>]} = eredis:q(C, ["EXEC"]).
+```
 
 Pipelining:
 
-    P1 = [["SET", a, "1"],
-          ["LPUSH", b, "3"],
-          ["LPUSH", b, "2"]].
-    [{ok, <<"OK">>}, {ok, <<"1">>}, {ok, <<"2">>}] = eredis:qp(C, P1).
-
+```erlang
+P1 = [["SET", a, "1"],
+      ["LPUSH", b, "3"],
+      ["LPUSH", b, "2"]].
+[{ok, <<"OK">>}, {ok, <<"1">>}, {ok, <<"2">>}] = eredis:qp(C, P1).
+```
 
 Pubsub:
 
-    1> eredis_sub:sub_example().
-    received {subscribed,<<"foo">>,<0.34.0>}
-    {<0.34.0>,<0.37.0>}
-    2> eredis_sub:pub_example().
-    received {message,<<"foo">>,<<"bar">>,<0.34.0>}
+```erl
+1> eredis_sub:sub_example().
+received {subscribed,<<"foo">>,<0.34.0>}
+{<0.34.0>,<0.37.0>}
+2> eredis_sub:pub_example().
+received {message,<<"foo">>,<<"bar">>,<0.34.0>}
+```
 
 Pattern Subscribe:
     
-    1> eredis_sub:psub_example(). 
-    received {subscribed,<<"foo*">>,<0.33.0>}
-    {<0.33.0>,<0.36.0>}
-    2> eredis_sub:ppub_example().
-    received {pmessage,<<"foo*">>,<<"foo123">>,<<"bar">>,<0.33.0>}
-    ok
-    3> 
+```erl
+1> eredis_sub:psub_example(). 
+received {subscribed,<<"foo*">>,<0.33.0>}
+{<0.33.0>,<0.36.0>}
+2> eredis_sub:ppub_example().
+received {pmessage,<<"foo*">>,<<"foo123">>,<<"bar">>,<0.33.0>}
+ok
+3> 
+```
 
 EUnit tests:
 
-    ./rebar eunit
+```console
+./rebar eunit
+```
 
 
 ## Commands
