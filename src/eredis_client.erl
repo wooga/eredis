@@ -108,10 +108,20 @@ handle_cast({request, Req}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-%% Receive data from socket, see handle_response/2
-handle_info({tcp, _Socket, Bs}, State) ->
-    inet:setopts(State#state.socket, [{active, once}]),
+%% Receive data from socket, see handle_response/2. Match `Socket' to
+%% enforce sanity.
+handle_info({tcp, Socket, Bs}, #state{socket = Socket} = State) ->
+    inet:setopts(Socket, [{active, once}]),
     {noreply, handle_response(Bs, State)};
+
+handle_info({tcp, Socket, _}, #state{socket = OurSocket} = State)
+  when OurSocket =/= Socket ->
+    %% Ignore tcp messages when the socket in message doesn't match
+    %% our state. In order to test behavior around receiving
+    %% tcp_closed message with clients waiting in queue, we send a
+    %% fake tcp_close message. This allows us to ignore messages that
+    %% arrive after that while we are reconnecting.
+    {noreply, State};
 
 handle_info({tcp_error, _Socket, _Reason}, State) ->
     %% This will be followed by a close
@@ -121,13 +131,19 @@ handle_info({tcp_error, _Socket, _Reason}, State) ->
 %% clients. If desired, spawn of a new process which will try to reconnect and
 %% notify us when Redis is ready. In the meantime, we can respond with
 %% an error message to all our clients.
-handle_info({tcp_closed, _Socket}, #state{reconnect_sleep = no_reconnect} = State) ->
-    %% If we aren't going to reconnect, then there is nothing else for this process to do.
+handle_info({tcp_closed, _Socket}, #state{reconnect_sleep = no_reconnect,
+                                          queue = Queue} = State) ->
+    reply_all({error, tcp_closed}, Queue),
+    %% If we aren't going to reconnect, then there is nothing else for
+    %% this process to do.
     {stop, normal, State#state{socket = undefined}};
 
-handle_info({tcp_closed, _Socket}, State) ->
+handle_info({tcp_closed, _Socket}, #state{queue = Queue} = State) ->
     Self = self(),
     spawn(fun() -> reconnect_loop(Self, State) end),
+
+    %% tell all of our clients what has happened.
+    reply_all({error, tcp_closed}, Queue),
 
     %% Throw away the socket and the queue, as we will never get a
     %% response to the requests sent on the old socket. The absence of
@@ -240,6 +256,23 @@ reply(Value, Queue) ->
             error_logger:info_msg("Nothing in queue, but got value from parser~n"),
             throw(empty_queue)
     end.
+
+%% @doc Send `Value' to each client in queue. Only useful for sending
+%% an error message. Any in-progress reply data is ignored.
+-spec reply_all(any(), queue()) -> ok.
+reply_all(Value, Queue) ->
+    case queue:peek(Queue) of
+        empty ->
+            ok;
+        {value, Item} ->
+            safe_reply(receipient(Item), Value),
+            reply_all(Value, queue:drop(Queue))
+    end.
+
+receipient({_, From}) ->
+    From;
+receipient({_, From, _}) ->
+    From.
 
 safe_reply(undefined, _Value) ->
     ok;
