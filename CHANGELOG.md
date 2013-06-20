@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v1.0.6
+
+* If the connection to Redis is lost, requests in progress will
+  receive `{error, tcp_closed}` instead of the `gen_server:call`
+  timing out. Thanks to Seth Falcon for the patch.
+
+## v1.0.5
+
+* Added support for not selecting any specific database. Thanks to
+  Mikl Kurkov for the patch.
+
 ## v1.0.4
 
 * Added `eredis:q_noreply/2` which sends a fire-and-forget request to
