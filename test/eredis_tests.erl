@@ -114,6 +114,12 @@ c() ->
     {ok, C} = Res,
     C.
 
+c_no_reconnect() ->
+    Res = eredis:start_link("127.0.0.1", 6379, 0, "", no_reconnect),
+    ?assertMatch({ok, _}, Res),
+    {ok, C} = Res,
+    C.
+
 multibulk_test_() ->
     [?_assertEqual(<<"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n">>,
                    list_to_binary(create_multibulk(["SET", "foo", "bar"]))),
@@ -129,3 +135,51 @@ multibulk_test_() ->
 
 undefined_database_test() ->
     ?assertMatch({ok,_}, eredis:start_link("localhost", 6379, undefined)).
+
+tcp_closed_test() ->
+    C = c(),
+    tcp_closed_rig(C).
+
+tcp_closed_no_reconnect_test() ->
+    C = c_no_reconnect(),
+    tcp_closed_rig(C).
+
+tcp_closed_rig(C) ->
+    %% fire async requests to add to redis client queue and then trick
+    %% the client into thinking the connection to redis has been
+    %% closed. This behavior can be observed when Redis closes an idle
+    %% connection just as a traffic burst starts.
+    DoSend = fun(tcp_closed) ->
+                     C ! {tcp_closed, fake_socket};
+                (Cmd) ->
+                     eredis:q(C, Cmd)
+             end,
+    %% attach an id to each message for later
+    Msgs = [{1, ["GET", "foo"]},
+            {2, ["GET", "bar"]},
+            {3, tcp_closed}],
+    Pids = [ remote_query(DoSend, M) || M <- Msgs ],
+    Results = gather_remote_queries(Pids),
+    ?assertEqual({error, tcp_closed}, proplists:get_value(1, Results)),
+    ?assertEqual({error, tcp_closed}, proplists:get_value(2, Results)).
+
+remote_query(Fun, {Id, Cmd}) ->
+    Parent = self(),
+    spawn(fun() ->
+                  Result = Fun(Cmd),
+                  Parent ! {self(), Id, Result}
+          end).
+
+gather_remote_queries(Pids) ->
+    gather_remote_queries(Pids, []).
+
+gather_remote_queries([], Acc) ->
+    Acc;
+gather_remote_queries([Pid | Rest], Acc) ->
+    receive
+        {Pid, Id, Result} ->
+            gather_remote_queries(Rest, [{Id, Result} | Acc])
+    after
+        10000 ->
+            error({gather_remote_queries, timeout})
+    end.
