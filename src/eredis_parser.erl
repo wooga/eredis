@@ -22,7 +22,8 @@
 %%    gen_tcp:recv/2 with the desired size.
 
 -module(eredis_parser).
--author('knut.nesheim@wooga.com').
+-include_lib("eredis.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -export([init/0, parse/2]).
 
@@ -30,8 +31,6 @@
 -export([parse_bulk/1, parse_bulk/2,
          parse_multibulk/1, parse_multibulk/2]).
 
--include_lib("eredis.hrl").
--include_lib("eunit/include/eunit.hrl").
 
 %%
 %% API

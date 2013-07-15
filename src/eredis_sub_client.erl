@@ -8,8 +8,6 @@
 %%
 %% There is one consuming process per eredis_sub_client.
 -module(eredis_sub_client).
--author('knut.nesheim@wooga.com').
-
 -behaviour(gen_server).
 -include("eredis.hrl").
 -include("eredis_sub.hrl").

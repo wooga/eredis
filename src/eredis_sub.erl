@@ -2,8 +2,6 @@
 %% Erlang PubSub Redis client
 %%
 -module(eredis_sub).
--author('knut.nesheim@wooga.com').
-
 -include("eredis.hrl").
 
 %% Default timeout for calls to the client gen_server

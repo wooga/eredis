@@ -7,8 +7,6 @@
 %%   {ok, <<"bar">>} = eredis:q(["GET", "foo"]).
 
 -module(eredis).
--author('knut.nesheim@wooga.com').
-
 -include("eredis.hrl").
 
 %% Default timeout for calls to the client gen_server

@@ -21,10 +21,7 @@
 %%    we have all the responses we need and then reply with all of them.
 %%
 -module(eredis_client).
--author('knut.nesheim@wooga.com').
-
 -behaviour(gen_server).
-
 -include("eredis.hrl").
 
 %% API
