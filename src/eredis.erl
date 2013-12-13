@@ -19,6 +19,13 @@
 %% Exported for testing
 -export([create_multibulk/1]).
 
+%% Type of gen_server process id
+-type client() :: pid() |
+                  atom() |
+                  {atom(),atom()} |
+                  {global,term()} |
+                  {via,atom(),term()}.
+
 %%
 %% PUBLIC API
 %%
@@ -58,7 +65,7 @@ start_link(Args) ->
 stop(Client) ->
     eredis_client:stop(Client).
 
--spec q(Client::pid(), Command::iolist()) ->
+-spec q(Client::client(), Command::iolist()) ->
                {ok, return_value()} | {error, Reason::binary() | no_connection}.
 %% @doc: Executes the given command in the specified connection. The
 %% command must be a valid Redis command and may contain arbitrary
@@ -71,7 +78,7 @@ q(Client, Command, Timeout) ->
     call(Client, Command, Timeout).
 
 
--spec qp(Client::pid(), Pipeline::pipeline()) ->
+-spec qp(Client::client(), Pipeline::pipeline()) ->
                 [{ok, return_value()} | {error, Reason::binary()}] |
                 {error, no_connection}.
 %% @doc: Executes the given pipeline (list of commands) in the
@@ -84,7 +91,7 @@ qp(Client, Pipeline) ->
 qp(Client, Pipeline, Timeout) ->
     pipeline(Client, Pipeline, Timeout).
 
--spec q_noreply(Client::pid(), Command::iolist()) -> ok.
+-spec q_noreply(Client::client(), Command::iolist()) -> ok.
 %% @doc
 %% @see q/2
 %% Executes the command but does not wait for a response and ignores any errors.
