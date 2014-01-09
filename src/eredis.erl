@@ -14,7 +14,8 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, stop/1, q/2, q/3, qp/2, qp/3, q_noreply/2]).
+         start_link/5, stop/1, q/2, q/3, qp/2, qp/3, q_noreply/2, change_database/2,
+         change_database/3]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -97,6 +98,15 @@ qp(Client, Pipeline, Timeout) ->
 %% Executes the command but does not wait for a response and ignores any errors.
 q_noreply(Client, Command) ->
     cast(Client, Command).
+
+-spec change_database(Client::client(), Database::integer() | undefined) -> ok.
+change_database(Client, Database)
+  when is_integer(Database) orelse Database == undefined ->
+    gen_server:call(Client, {change_database, Database}, ?TIMEOUT).
+
+change_database(Client, Database, Timeout)
+  when is_integer(Database) orelse Database == undefined ->
+    gen_server:call(Client, {change_database, Database}, Timeout).
 
 %%
 %% INTERNAL HELPERS
