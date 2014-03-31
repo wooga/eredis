@@ -43,7 +43,7 @@ start_link(Host, Port, Database, Password) ->
     start_link(Host, Port, Database, Password, 100).
 
 start_link(Host, Port, Database, Password, ReconnectSleep) ->
-    start_link(Host, Port, Database, Password, ReconnectSleep, 5000).
+    start_link(Host, Port, Database, Password, ReconnectSleep, ?TIMEOUT).
 
 start_link(Host, Port, Database, Password, ReconnectSleep, Timeout)
   when is_list(Host),
@@ -64,7 +64,7 @@ start_link(Args) ->
     Database       = proplists:get_value(database, Args, 0),
     Password       = proplists:get_value(password, Args, ""),
     ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
-    Timeout        = proplists:get_value(timeout, Args, 5000),
+    Timeout        = proplists:get_value(timeout, Args, ?TIMEOUT),
     start_link(Host, Port, Database, Password, ReconnectSleep, Timeout).
 
 stop(Client) ->
