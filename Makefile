@@ -8,11 +8,11 @@ compile: ebin/$(APP).app Emakefile
 	erl -noinput -eval 'up_to_date = make:all()' -s erlang halt
 
 clean:
-	rm --force -- ebin/*.beam Emakefile ebin/$(APP).app
+	rm -f -- ebin/*.beam Emakefile ebin/$(APP).app
 
 ebin/$(APP).app: src/$(APP).app.src
-	mkdir --parents ebin
-	cp --force -- $< $@
+	mkdir -p ebin
+	cp -f -- $< $@
 
 ifdef DEBUG
 EXTRA_OPTS:=debug_info,
