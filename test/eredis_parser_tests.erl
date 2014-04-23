@@ -6,7 +6,7 @@
 
 -module(eredis_parser_tests).
 
--include_lib("eredis.hrl").
+-include("eredis.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -import(eredis_parser, [parse/2, init/0, parse_bulk/1, parse_bulk/2,
