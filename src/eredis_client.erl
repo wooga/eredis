@@ -40,7 +40,7 @@
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
-          queue :: queue() | undefined
+          queue :: eredis_queue() | undefined
 }).
 
 %%
@@ -256,7 +256,7 @@ reply(Value, Queue) ->
 
 %% @doc Send `Value' to each client in queue. Only useful for sending
 %% an error message. Any in-progress reply data is ignored.
--spec reply_all(any(), queue()) -> ok.
+-spec reply_all(any(), eredis_queue()) -> ok.
 reply_all(Value, Queue) ->
     case queue:peek(Queue) of
         empty ->

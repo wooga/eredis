@@ -17,6 +17,13 @@
 -type continuation_data() :: any().
 -type parser_state() :: status_continue | bulk_continue | multibulk_continue.
 
+%% Internal types
+-ifdef(namespaced_types).
+-type eredis_queue() :: queue:queue().
+-else.
+-type eredis_queue() :: queue().
+-endif.
+
 %% Internal parser state. Is returned from parse/2 and must be
 %% included on the next calls to parse/2.
 -record(pstate, {
