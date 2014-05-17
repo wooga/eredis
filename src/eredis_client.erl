@@ -95,7 +95,7 @@ handle_call(_Request, _From, State) ->
 
 
 handle_cast({request, Req}, State) ->
-  case do_request(Req, self(), State) of
+  case do_request(Req, undefined, State) of
         {reply, _Reply, State1} ->
             {noreply, State1};
         {noreply, State1} ->
@@ -174,7 +174,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
--spec do_request(Req::iolist(), From::pid(), #state{}) ->
+-spec do_request(Req::iolist(), From::pid()|undefined, #state{}) ->
                         {noreply, #state{}} | {reply, Reply::any(), #state{}}.
 %% @doc: Sends the given request to redis. If we do not have a
 %% connection, returns error.
