@@ -40,7 +40,7 @@
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
-          queue :: queue() | undefined
+          queue :: queue:queue(_) | undefined
 }).
 
 %%
@@ -95,7 +95,7 @@ handle_call(_Request, _From, State) ->
 
 
 handle_cast({request, Req}, State) ->
-    case do_request(Req, undefined, State) of
+  case do_request(Req, self(), State) of
         {reply, _Reply, State1} ->
             {noreply, State1};
         {noreply, State1} ->
@@ -256,7 +256,7 @@ reply(Value, Queue) ->
 
 %% @doc Send `Value' to each client in queue. Only useful for sending
 %% an error message. Any in-progress reply data is ignored.
--spec reply_all(any(), queue()) -> ok.
+-spec reply_all(any(), queue:queue(_)) -> ok.
 reply_all(Value, Queue) ->
     case queue:peek(Queue) of
         empty ->

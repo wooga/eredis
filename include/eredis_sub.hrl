@@ -16,7 +16,7 @@
 
           % This is the queue of messages to send to the controlling
           % process.
-          msg_queue :: queue(),
+          msg_queue :: queue:queue(_),
 
           %% When the queue reaches this size, either drop all
           %% messages or exit.
