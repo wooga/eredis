@@ -95,7 +95,7 @@ handle_call(_Request, _From, State) ->
 
 
 handle_cast({request, Req}, State) ->
-  case do_request(Req, undefined, State) of
+    case do_request(Req, undefined, State) of
         {reply, _Reply, State1} ->
             {noreply, State1};
         {noreply, State1} ->
