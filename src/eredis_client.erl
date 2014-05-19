@@ -37,7 +37,7 @@
           password :: binary() | undefined,
           database :: binary() | undefined,
           reconnect_sleep :: reconnect_sleep() | undefined,
-          timeout :: integer() | undefined,
+          connect_timeout :: integer() | undefined,
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
@@ -53,11 +53,11 @@
                  Database::integer() | undefined,
                  Password::string(),
                  ReconnectSleep::reconnect_sleep(),
-                 Timeout::integer() | undefined) ->
+                 ConnectTimeout::integer() | undefined) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Host, Port, Database, Password, ReconnectSleep, Timeout) ->
+start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout) ->
     gen_server:start_link(?MODULE, [Host, Port, Database, Password,
-                                    ReconnectSleep, Timeout], []).
+                                    ReconnectSleep, ConnectTimeout], []).
 
 
 stop(Pid) ->
@@ -67,13 +67,13 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Database, Password, ReconnectSleep, Timeout]) ->
+init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout]) ->
     State = #state{host = Host,
                    port = Port,
                    database = read_database(Database),
                    password = list_to_binary(Password),
                    reconnect_sleep = ReconnectSleep,
-                   timeout = Timeout,
+                   connect_timeout = ConnectTimeout,
 
                    parser_state = eredis_parser:init(),
                    queue = queue:new()},
@@ -286,7 +286,7 @@ safe_reply(From, Value) ->
 %% {SomeError, Reason}.
 connect(State) ->
     case gen_tcp:connect(State#state.host, State#state.port,
-                         ?SOCKET_OPTS, State#state.timeout) of
+                         ?SOCKET_OPTS, State#state.connect_timeout) of
         {ok, Socket} ->
             case authenticate(Socket, State#state.password) of
                 ok ->
