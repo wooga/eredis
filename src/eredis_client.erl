@@ -25,7 +25,7 @@
 -include("eredis.hrl").
 
 %% API
--export([start_link/5, stop/1, select_database/2]).
+-export([start_link/5, start_link/6, stop/1, select_database/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,7 +40,8 @@
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
-          queue :: queue() | undefined
+          queue :: queue() | undefined,
+          no_dbselection :: atom() | undefined
 }).
 
 %%
@@ -54,8 +55,10 @@
                  ReconnectSleep::reconnect_sleep()) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
 start_link(Host, Port, Database, Password, ReconnectSleep) ->
-    gen_server:start_link(?MODULE, [Host, Port, Database, Password, ReconnectSleep], []).
+    gen_server:start_link(?MODULE, [Host, Port, Database, Password, ReconnectSleep, none], []).
 
+start_link(Host, Port, Database, Password, ReconnectSleep, no_dbselection) ->
+    gen_server:start_link(?MODULE, [Host, Port, Database, Password, ReconnectSleep, no_dbselection], []).
 
 stop(Pid) ->
     gen_server:call(Pid, stop).
@@ -64,7 +67,7 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Database, Password, ReconnectSleep]) ->
+init([Host, Port, Database, Password, ReconnectSleep, DbSelection]) ->
     State = #state{host = Host,
                    port = Port,
                    database = read_database(Database),
@@ -73,8 +76,7 @@ init([Host, Port, Database, Password, ReconnectSleep]) ->
 
                    parser_state = eredis_parser:init(),
                    queue = queue:new()},
-
-    case connect(State) of
+    case connect(State, DbSelection) of
         {ok, NewState} ->
             {ok, NewState};
         {error, Reason} ->
@@ -280,16 +282,20 @@ safe_reply(From, Value) ->
 %% the correct database. These commands are synchronous and if Redis
 %% returns something we don't expect, we crash. Returns {ok, State} or
 %% {SomeError, Reason}.
-connect(State) ->
+connect(State, DbSelection) ->
     case gen_tcp:connect(State#state.host, State#state.port, ?SOCKET_OPTS) of
         {ok, Socket} ->
             case authenticate(Socket, State#state.password) of
                 ok ->
-                    case select_database(Socket, State#state.database) of
-                        ok ->
-                            {ok, State#state{socket = Socket}};
-                        {error, Reason} ->
-                            {error, {select_error, Reason}}
+                    case DbSelection of
+                        no_dbselection -> {ok, State#state{socket = Socket, no_dbselection = DbSelection}};
+                        _ ->
+                            case select_database(Socket, State#state.database) of
+                                ok ->
+                                    {ok, State#state{socket = Socket, no_dbselection = DbSelection}};
+                                {error, Reason} ->
+                                    {error, {select_error, Reason}}
+                            end
                     end;
                 {error, Reason} ->
                     {error, {authentication_error, Reason}}
@@ -332,7 +338,7 @@ do_sync_command(Socket, Command) ->
 %% successfully issuing the auth and select calls. When we have a
 %% connection, give the socket to the redis client.
 reconnect_loop(Client, #state{reconnect_sleep = ReconnectSleep} = State) ->
-    case catch(connect(State)) of
+    case catch(connect(State, State#state.no_dbselection)) of
         {ok, #state{socket = Socket}} ->
             gen_tcp:controlling_process(Socket, Client),
             Client ! {connection_ready, Socket};
