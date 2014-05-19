@@ -56,7 +56,7 @@ init([Host, Port, Password, ReconnectSleep, MaxQueueSize, QueueBehaviour]) ->
 
     case connect(State) of
         {ok, NewState} ->
-            inet:setopts(NewState#state.socket, [{active, once}]),
+            ok = inet:setopts(NewState#state.socket, [{active, once}]),
             {ok, NewState};
         {error, Reason} ->
             {stop, {connection_error, Reason}}
@@ -145,7 +145,8 @@ handle_cast(_Msg, State) ->
 
 %% Receive data from socket, see handle_response/2
 handle_info({tcp, _Socket, Bs}, State) ->
-    inet:setopts(State#state.socket, [{active, once}]),
+    ok = inet:setopts(State#state.socket, [{active, once}]),
+
     NewState = handle_response(Bs, State),
     case queue:len(NewState#state.msg_queue) > NewState#state.max_queue_size of
         true ->
@@ -186,8 +187,9 @@ handle_info({tcp_closed, _Socket}, State) ->
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
     send_to_controller({eredis_connected, self()}, State),
-    inet:setopts(Socket, [{active, once}]),
+    ok = inet:setopts(Socket, [{active, once}]),
     {noreply, State#state{socket = Socket}};
+
 
 %% Our controlling process is down.
 handle_info({'DOWN', Ref, process, Pid, _Reason},
@@ -280,11 +282,10 @@ queue_or_send(Msg, State) ->
 
 %% @doc: Helper for connecting to Redis. These commands are
 %% synchronous and if Redis returns something we don't expect, we
-%% crash. Returns {ok, State} or {SomeError, Reason}.
+%% crash. Returns {ok, State} or {error, Reason}.
 connect(State) ->
     case gen_tcp:connect(State#state.host, State#state.port, ?SOCKET_OPTS) of
         {ok, Socket} ->
-            inet:setopts(Socket, [{active, false}]),
             case authenticate(Socket, State#state.password) of
                 ok ->
                     {ok, State#state{socket = Socket}};

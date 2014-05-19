@@ -108,7 +108,7 @@ handle_cast(_Msg, State) ->
 %% Receive data from socket, see handle_response/2. Match `Socket' to
 %% enforce sanity.
 handle_info({tcp, Socket, Bs}, #state{socket = Socket} = State) ->
-    inet:setopts(Socket, [{active, once}]),
+    ok = inet:setopts(Socket, [{active, once}]),
     {noreply, handle_response(Bs, State)};
 
 handle_info({tcp, Socket, _}, #state{socket = OurSocket} = State)
@@ -313,13 +313,13 @@ authenticate(Socket, Password) ->
 %% @doc: Executes the given command synchronously, expects Redis to
 %% return "+OK\r\n", otherwise it will fail.
 do_sync_command(Socket, Command) ->
-    inet:setopts(Socket, [{active, false}]),
+    ok = inet:setopts(Socket, [{active, false}]),
     case gen_tcp:send(Socket, Command) of
         ok ->
             %% Hope there's nothing else coming down on the socket..
             case gen_tcp:recv(Socket, 0, ?RECV_TIMEOUT) of
                 {ok, <<"+OK\r\n">>} ->
-                    inet:setopts(Socket, [{active, once}]),
+                    ok = inet:setopts(Socket, [{active, once}]),
                     ok;
                 Other ->
                     {error, {unexpected_data, Other}}

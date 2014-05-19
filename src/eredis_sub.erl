@@ -66,6 +66,9 @@ stop(Pid) ->
 %%   {message, Channel::binary(), Message::binary(), pid()}
 %%     This is sent for each pubsub message received by the client.
 %%
+%%   {pmessage, Pattern::binary(), Channel::binary(), Message::binary(), pid()}
+%%     This is sent for each pattern pubsub message received by the client.
+%%
 %%   {dropped, NumMessages::integer(), pid()}
 %%     If the queue reaches the max size as specified in start_link
 %%     and the behaviour is to drop messages, this message is sent when
