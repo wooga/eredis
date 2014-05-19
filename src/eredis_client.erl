@@ -25,7 +25,7 @@
 -include("eredis.hrl").
 
 %% API
--export([start_link/5, stop/1, select_database/2]).
+-export([start_link/6, stop/1, select_database/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,6 +37,7 @@
           password :: binary() | undefined,
           database :: binary() | undefined,
           reconnect_sleep :: reconnect_sleep() | undefined,
+          timeout :: integer() | undefined,
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
@@ -51,10 +52,12 @@
                  Port::integer(),
                  Database::integer() | undefined,
                  Password::string(),
-                 ReconnectSleep::reconnect_sleep()) ->
+                 ReconnectSleep::reconnect_sleep(),
+                 Timeout::integer() | undefined) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Host, Port, Database, Password, ReconnectSleep) ->
-    gen_server:start_link(?MODULE, [Host, Port, Database, Password, ReconnectSleep], []).
+start_link(Host, Port, Database, Password, ReconnectSleep, Timeout) ->
+    gen_server:start_link(?MODULE, [Host, Port, Database, Password,
+                                    ReconnectSleep, Timeout], []).
 
 
 stop(Pid) ->
@@ -64,12 +67,13 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Database, Password, ReconnectSleep]) ->
+init([Host, Port, Database, Password, ReconnectSleep, Timeout]) ->
     State = #state{host = Host,
                    port = Port,
                    database = read_database(Database),
                    password = list_to_binary(Password),
                    reconnect_sleep = ReconnectSleep,
+                   timeout = Timeout,
 
                    parser_state = eredis_parser:init(),
                    queue = queue:new()},
@@ -281,7 +285,8 @@ safe_reply(From, Value) ->
 %% returns something we don't expect, we crash. Returns {ok, State} or
 %% {SomeError, Reason}.
 connect(State) ->
-    case gen_tcp:connect(State#state.host, State#state.port, ?SOCKET_OPTS) of
+    case gen_tcp:connect(State#state.host, State#state.port,
+                         ?SOCKET_OPTS, State#state.timeout) of
         {ok, Socket} ->
             case authenticate(Socket, State#state.password) of
                 ok ->
