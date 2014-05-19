@@ -87,6 +87,9 @@ handle_call({request, Req}, From, State) ->
 handle_call({pipeline, Pipeline}, From, State) ->
     do_pipeline(Pipeline, From, State);
 
+handle_call({change_database, Database}, _From, State) ->
+    {reply, ok, State#state{database = read_database(Database)}};
+
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 
