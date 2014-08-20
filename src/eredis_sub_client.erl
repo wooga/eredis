@@ -183,6 +183,17 @@ handle_info({tcp_closed, _Socket}, State) ->
     %% signal we are "down"
     {noreply, State#state{socket = undefined}};
 
+%% Controller might want to be notified about every reconnect attempt
+handle_info(reconnect_attempt, State) ->
+    send_to_controller({eredis_reconnect_attempt, self()}, State),
+    {noreply, State};
+
+%% Controller might want to be notified about every reconnect failure and reason
+handle_info({reconnect_failed, Reason}, State) ->
+    send_to_controller({eredis_reconnect_failed, self(),
+                        {error, {connection_error, Reason}}}, State),
+    {noreply, State};
+
 %% Redis is ready to accept requests, the given Socket is a socket
 %% already connected and authenticated.
 handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
@@ -322,11 +333,13 @@ authenticate(Socket, Password) ->
 %% successfully issuing the auth and select calls. When we have a
 %% connection, give the socket to the redis client.
 reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep}=State) ->
+    Client ! reconnect_attempt,
     case catch(connect(State)) of
         {ok, #state{socket = Socket}} ->
             gen_tcp:controlling_process(Socket, Client),
             Client ! {connection_ready, Socket};
-        {error, _Reason} ->
+        {error, Reason} ->
+            Client ! {reconnect_failed, Reason},
             timer:sleep(ReconnectSleep),
             reconnect_loop(Client, State);
         %% Something bad happened when connecting, like Redis might be
