@@ -32,7 +32,8 @@
          terminate/2, code_change/3]).
 
 -record(state, {
-          host :: string() | undefined,
+          ip :: inet:ip_address() | undefined,
+          ipfamily :: inet | inet6 | undefined,
           port :: integer() | undefined,
           password :: binary() | undefined,
           database :: binary() | undefined,
@@ -68,19 +69,25 @@ stop(Pid) ->
 %%====================================================================
 
 init([Host, Port, Database, Password, ReconnectSleep, Timeout]) ->
-    State = #state{host = Host,
-                   port = Port,
-                   database = read_database(Database),
-                   password = list_to_binary(Password),
-                   reconnect_sleep = ReconnectSleep,
-                   timeout = Timeout,
+    case ip_address(Host) of
+        {ok, Ip} ->
+            State = #state{ip = Ip,
+                           ipfamily = ip_family(Ip),
+                           port = Port,
+                           database = read_database(Database),
+                           password = list_to_binary(Password),
+                           reconnect_sleep = ReconnectSleep,
+                           timeout = Timeout,
 
-                   parser_state = eredis_parser:init(),
-                   queue = queue:new()},
+                           parser_state = eredis_parser:init(),
+                           queue = queue:new()},
 
-    case connect(State) of
-        {ok, NewState} ->
-            {ok, NewState};
+            case connect(State) of
+                {ok, NewState} ->
+                    {ok, NewState};
+                {error, Reason} ->
+                    {stop, {connection_error, Reason}}
+            end;
         {error, Reason} ->
             {stop, {connection_error, Reason}}
     end.
@@ -280,13 +287,34 @@ safe_reply(undefined, _Value) ->
 safe_reply(From, Value) ->
     gen_server:reply(From, Value).
 
+ip_address(Host) ->
+    case inet_parse:address(Host) of
+        {ok, _Addr}=R -> R;
+        _ ->
+            case inet:getaddr(Host, inet6) of
+                {ok, _Addr}=R -> R;
+                _ ->
+                    case inet:getaddr(Host, inet) of
+                        {ok, _Addr}=R          -> R;
+                        {error, _Reason}=Error -> Error
+                    end
+            end
+    end.
+
+ip_family({_, _, _, _}) ->
+    inet;
+ip_family({_, _, _, _, _, _, _, _}) ->
+    inet6.
+
 %% @doc: Helper for connecting to Redis, authenticating and selecting
 %% the correct database. These commands are synchronous and if Redis
 %% returns something we don't expect, we crash. Returns {ok, State} or
 %% {SomeError, Reason}.
 connect(State) ->
-    case gen_tcp:connect(State#state.host, State#state.port,
-                         ?SOCKET_OPTS, State#state.timeout) of
+    case gen_tcp:connect(State#state.ip,
+                         State#state.port,
+                         [State#state.ipfamily | ?SOCKET_OPTS],
+                         State#state.timeout) of
         {ok, Socket} ->
             case authenticate(Socket, State#state.password) of
                 ok ->
