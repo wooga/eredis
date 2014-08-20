@@ -108,6 +108,7 @@ pubsub_connect_disconnect_messages_test() ->
     gen_tcp:close(Sock),
     Sub ! {tcp_closed, Sock},
     ?assertEqual({eredis_disconnected, Sub}, wait_for_msg(S)),
+    ?assertEqual({eredis_reconnect_attempt, Sub}, wait_for_msg(S)),
     ?assertEqual({eredis_connected, Sub}, wait_for_msg(S)),
     eredis_sub:stop(Sub).
 
