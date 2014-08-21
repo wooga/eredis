@@ -5,6 +5,11 @@
 
 -import(eredis, [create_multibulk/1]).
 
+connect_test() ->
+    ?assertMatch({ok, _}, eredis:start_link("127.0.0.1", 6379)),
+    ?assertMatch({ok, _}, eredis:start_link("::1", 6379)),
+    ?assertMatch({ok, _}, eredis:start_link("localhost", 6379)).
+
 get_set_test() ->
     C = c(),
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", foo])),
