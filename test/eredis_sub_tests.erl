@@ -157,7 +157,7 @@ dynamic_channels_test() ->
     eredis_sub:ack_message(Sub),
     receive M2 -> ?assertEqual({subscribed, <<"otherchan">>, Sub}, M2) end,
     eredis_sub:ack_message(Sub),
-    ?assertEqual({ok, [<<"newchan">>, <<"otherchan">>]},
+    ?assertEqual({ok, [<<"otherchan">>, <<"newchan">>]},
                  eredis_sub:channels(Sub)),
 
     eredis:q(Pub, [publish, newchan, foo]),
