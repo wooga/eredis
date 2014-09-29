@@ -108,21 +108,22 @@ handle_cast({ack_message, Pid},
 handle_cast({subscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
     Command = eredis:create_multibulk(["SUBSCRIBE" | Channels]),
     ok = gen_tcp:send(State#state.socket, Command),
-    {noreply, State#state{channels = Channels ++ State#state.channels}};
+    NewChannels = add_channels(Channels, State#state.channels),
+    {noreply, State#state{channels = NewChannels}};
 
 
 handle_cast({psubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
     Command = eredis:create_multibulk(["PSUBSCRIBE" | Channels]),
     ok = gen_tcp:send(State#state.socket, Command),
-    {noreply, State#state{channels = Channels ++ State#state.channels}};
+    NewChannels = add_channels(Channels, State#state.channels),
+    {noreply, State#state{channels = NewChannels}};
 
 
 
 handle_cast({unsubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
     Command = eredis:create_multibulk(["UNSUBSCRIBE" | Channels]),
     ok = gen_tcp:send(State#state.socket, Command),
-    NewChannels = lists:foldl(fun (C, Cs) -> lists:delete(C, Cs) end,
-                              State#state.channels, Channels),
+    NewChannels = remove_channels(Channels, State#state.channels),
     {noreply, State#state{channels = NewChannels}};
 
 
@@ -130,8 +131,7 @@ handle_cast({unsubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}}
 handle_cast({punsubscribe, Pid, Channels}, #state{controlling_process = {_, Pid}} = State) ->
     Command = eredis:create_multibulk(["PUNSUBSCRIBE" | Channels]),
     ok = gen_tcp:send(State#state.socket, Command),
-    NewChannels = lists:foldl(fun (C, Cs) -> lists:delete(C, Cs) end,
-                              State#state.channels, Channels),
+    NewChannels = remove_channels(Channels, State#state.channels),
     {noreply, State#state{channels = NewChannels}};
 
 
@@ -219,6 +219,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+-spec remove_channels([binary()], [binary()]) -> [binary()].
+remove_channels(Channels, OldChannels) ->
+    lists:foldl(fun lists:delete/2, OldChannels, Channels).
+
+-spec add_channels([binary()], [binary()]) -> [binary()].
+add_channels(Channels, OldChannels) ->
+    lists:foldl(fun(C, Cs) ->
+        case lists:member(C, Cs) of
+            true ->
+                Cs;
+            false ->
+                [C|Cs]
+        end
+    end, OldChannels, Channels).
 
 -spec handle_response(Data::binary(), State::#state{}) -> NewState::#state{}.
 %% @doc: Handle the response coming from Redis. This should only be

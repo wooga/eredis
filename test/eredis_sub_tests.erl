@@ -152,13 +152,20 @@ dynamic_channels_test() ->
     receive {message, <<"foo">>, _, _} -> ?assert(false)
     after 5 -> ok end,
 
-    eredis_sub:subscribe(Sub, [<<"newchan">>, <<"otherchan">>]),
-    receive M1 -> ?assertEqual({subscribed, <<"newchan">>, Sub}, M1) end,
-    eredis_sub:ack_message(Sub),
-    receive M2 -> ?assertEqual({subscribed, <<"otherchan">>, Sub}, M2) end,
-    eredis_sub:ack_message(Sub),
-    ?assertEqual({ok, [<<"newchan">>, <<"otherchan">>]},
-                 eredis_sub:channels(Sub)),
+    %% We do the following twice to show that subscribing to the same channel
+    %% doesn't cause the channel to show up twice
+    lists:foreach(fun(_) ->
+        eredis_sub:subscribe(Sub, [<<"newchan">>, <<"otherchan">>]),
+        receive M1 -> ?assertEqual({subscribed, <<"newchan">>, Sub}, M1) end,
+        eredis_sub:ack_message(Sub),
+        receive M2 -> ?assertEqual({subscribed, <<"otherchan">>, Sub}, M2) end,
+        eredis_sub:ack_message(Sub),
+
+        {ok, Channels} = eredis_sub:channels(Sub),
+        ?assertEqual(true, lists:member(<<"otherchan">>, Channels)),
+        ?assertEqual(true, lists:member(<<"newchan">>, Channels)),
+        ?assertEqual(2, length(Channels))
+    end, lists:seq(0, 1)),
 
     eredis:q(Pub, [publish, newchan, foo]),
     ?assertEqual([{message, <<"newchan">>, <<"foo">>, Sub}], recv_all(Sub)),
