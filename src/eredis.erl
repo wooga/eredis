@@ -70,7 +70,7 @@ start_link(Args) ->
 stop(Client) ->
     eredis_client:stop(Client).
 
--spec q(Client::client(), Command::iolist()) ->
+-spec q(Client::client(), Command::[any()]) ->
                {ok, return_value()} | {error, Reason::binary() | no_connection}.
 %% @doc: Executes the given command in the specified connection. The
 %% command must be a valid Redis command and may contain arbitrary
@@ -96,7 +96,7 @@ qp(Client, Pipeline) ->
 qp(Client, Pipeline, Timeout) ->
     pipeline(Client, Pipeline, Timeout).
 
--spec q_noreply(Client::client(), Command::iolist()) -> ok.
+-spec q_noreply(Client::client(), Command::[any()]) -> ok.
 %% @doc
 %% @see q/2
 %% Executes the command but does not wait for a response and ignores any errors.
@@ -121,7 +121,7 @@ cast(Client, Command) ->
     Request = {request, create_multibulk(Command)},
     gen_server:cast(Client, Request).
 
--spec create_multibulk(Args::iolist()) -> Command::iolist().
+-spec create_multibulk(Args::[any()]) -> Command::iolist().
 %% @doc: Creates a multibulk command with all the correct size headers
 create_multibulk(Args) ->
     ArgCount = [<<$*>>, integer_to_list(length(Args)), <<?NL>>],
