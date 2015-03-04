@@ -5,7 +5,7 @@
 -type option() :: {host, string()} | {port, integer()} | {database, string()} | {password, string()} | {reconnect_sleep, reconnect_sleep()}.
 -type server_args() :: [option()].
 
--type return_value() :: undefined | binary() | [binary()].
+-type return_value() :: undefined | binary() | [binary() | nonempty_list()].
 
 -type pipeline() :: [iolist()].
 
