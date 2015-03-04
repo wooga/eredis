@@ -320,6 +320,7 @@ authenticate(Socket, Password) ->
 %% @doc: Executes the given command synchronously, expects Redis to
 %% return "+OK\r\n", otherwise it will fail.
 do_sync_command(Socket, Command) ->
+    ok = inet:setopts(Socket, [{active, false}]),    
     case gen_tcp:send(Socket, Command) of
         ok ->
             %% Hope there's nothing else coming down on the socket..
