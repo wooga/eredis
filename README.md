@@ -160,6 +160,10 @@ eredis also supports Pattern Subscribe using `eredis_sub:psubscribe/2`
 and `eredis_sub:unsubscribe/2`. As with normal subscriptions, a message
 is sent to the controlling process for each channel.
 
+As of v1.0.7 the controlling process will be notified in case of
+reconnection attempts or failures. See `test/eredis_sub_tests` for
+details.
+
 ## AUTH and SELECT
 
 Eredis also implements the AUTH and SELECT calls for you. When the
