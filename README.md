@@ -31,6 +31,22 @@ KeyValuePairs = ["key1", "value1", "key2", "value2", "key3", "value3"].
 {ok, Values} = eredis:q(C, ["MGET" | ["key1", "key2", "key3"]]).
 ```
 
+HASH
+
+```erlang
+HashObj = ["id", "objectId", "message", "message", "receiver", "receiver", "status", "read"].
+eredis:q(C, ["HMSET", "key" | HashObj]).
+{ok, Values} = eredis:q(C, ["HGETALL", "key"]).
+```
+
+LIST
+
+```erlang
+eredis:q(C, ["LPUSH", "keylist", "value"]).
+eredis:q(C, ["RPUSH", "keylist", "value"]).
+eredis:q(C, ["LRANGE", "keylist",0,-1]).
+```
+
 Transactions:
 
 ```erlang
