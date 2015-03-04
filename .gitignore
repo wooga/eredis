@@ -2,3 +2,4 @@ ebin/*
 .eunit
 *~
 Emakefile
+.rebar
