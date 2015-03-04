@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v1.0.7
+
+* If an eredis_sub_client needs to reconnect to Redis, the controlling
+  process is now notified with the message `{eredis_reconnect_attempt,
+  Pid}`. If the reconnection attempt fails, the message is
+  `{eredis_reconnect_failed, Pid, Reason}`. Thanks to Piotr Nosek for
+  the patch.
+
+* No more deprecation warnings of the `queue` type on OTP 17. Thanks
+  to Daniel Kempkens for the patch.
+
+* Various spec fixes. Thanks to Hernan Rivas Acosta and Anton Kalyaev.
+
 ## v1.0.6
 
 * If the connection to Redis is lost, requests in progress will
