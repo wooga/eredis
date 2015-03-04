@@ -315,23 +315,8 @@ connect(State) ->
 authenticate(_Socket, <<>>) ->
     ok;
 authenticate(Socket, Password) ->
-    do_sync_command(Socket, ["AUTH", " ", Password, "\r\n"]).
+    eredis_client:do_sync_command(Socket, ["AUTH", " ", Password, "\r\n"]).
 
-%% @doc: Executes the given command synchronously, expects Redis to
-%% return "+OK\r\n", otherwise it will fail.
-do_sync_command(Socket, Command) ->
-    case gen_tcp:send(Socket, Command) of
-        ok ->
-            %% Hope there's nothing else coming down on the socket..
-            case gen_tcp:recv(Socket, 0, ?RECV_TIMEOUT) of
-                {ok, <<"+OK\r\n">>} ->
-                    ok;
-                Other ->
-                    {error, {unexpected_data, Other}}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 %% @doc: Loop until a connection can be established, this includes
 %% successfully issuing the auth and select calls. When we have a
