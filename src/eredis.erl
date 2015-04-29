@@ -3,8 +3,8 @@
 %%
 %% Usage:
 %%   {ok, Client} = eredis:start_link().
-%%   {ok, <<"OK">>} = eredis:q(["SET", "foo", "bar"]).
-%%   {ok, <<"bar">>} = eredis:q(["GET", "foo"]).
+%%   {ok, <<"OK">>} = eredis:q(Client, ["SET", "foo", "bar"]).
+%%   {ok, <<"bar">>} = eredis:q(Client, ["GET", "foo"]).
 
 -module(eredis).
 -include("eredis.hrl").
