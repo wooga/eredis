@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v1.0.8
+
+* Fixed include directive to work with rebar 2.5.1. Thanks to Feng Hao
+  for the patch.
+
 ## v1.0.7
 
 * If an eredis_sub_client needs to reconnect to Redis, the controlling
