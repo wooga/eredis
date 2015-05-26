@@ -22,7 +22,7 @@
 %%    gen_tcp:recv/2 with the desired size.
 
 -module(eredis_parser).
--include_lib("eredis.hrl").
+-include("eredis.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -export([init/0, parse/2]).
