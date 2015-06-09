@@ -3,3 +3,5 @@ ebin/*
 *~
 Emakefile
 .rebar
+.DS_Store
+doc
