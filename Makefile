@@ -1,5 +1,7 @@
 APP=eredis
 
+PRE17 := $(shell ERL_FLAGS="" erl -eval 'io:format("~s~n", [case re:run(erlang:system_info(otp_release), "^R") of nomatch -> ""; _ -> pre17 end]), halt().' -noshell)
+
 .PHONY: all compile clean Emakefile
 
 all: compile
@@ -20,6 +22,10 @@ endif
 
 ifdef TEST
 EXTRA_OPTS:=$(EXTRA_OPTS) {d,'TEST', true},
+endif
+
+ifndef PRE17
+EXTRA_OPTS:=$(EXTRA_OPTS) {d,namespaced_types},
 endif
 
 Emakefile: Emakefile.src
