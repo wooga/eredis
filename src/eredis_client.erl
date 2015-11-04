@@ -287,8 +287,9 @@ safe_reply(From, Value) ->
 %% returns something we don't expect, we crash. Returns {ok, State} or
 %% {SomeError, Reason}.
 connect(State) ->
-    case gen_tcp:connect(State#state.host, State#state.port,
-                         ?SOCKET_OPTS, State#state.connect_timeout) of
+    {ok, {AFamily, Addr}} = get_addr(State#state.host),
+    case gen_tcp:connect(Addr, State#state.port,
+                         [AFamily | ?SOCKET_OPTS], State#state.connect_timeout) of
         {ok, Socket} ->
             case authenticate(Socket, State#state.password) of
                 ok ->
@@ -303,6 +304,21 @@ connect(State) ->
             end;
         {error, Reason} ->
             {error, {connection_error, Reason}}
+    end.
+
+get_addr(Hostname) ->
+    case inet:parse_address(Hostname) of
+        {ok, {_,_,_,_} = Addr} ->         {ok, {inet, Addr}};
+        {ok, {_,_,_,_,_,_,_,_} = Addr} -> {ok, {inet6, Addr}};
+        {error, einval} ->
+            case inet:getaddr(Hostname, inet6) of
+                 {error, _} ->
+                     case inet:getaddr(Hostname, inet) of
+                         {ok, Addr}-> {ok, {inet, Addr}};
+                         {error, _} = Res -> Res
+                     end;
+                 {ok, Addr} -> {ok, {inet6, Addr}}
+            end
     end.
 
 select_database(_Socket, undefined) ->
