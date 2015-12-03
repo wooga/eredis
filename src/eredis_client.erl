@@ -315,7 +315,7 @@ select_database(Socket, Database) ->
 authenticate(_Socket, <<>>) ->
     ok;
 authenticate(Socket, Password) ->
-    do_sync_command(Socket, ["AUTH", " ", Password, "\r\n"]).
+    do_sync_command(Socket, ["AUTH", " \"", Password, "\"\r\n"]).
 
 %% @doc: Executes the given command synchronously, expects Redis to
 %% return "+OK\r\n", otherwise it will fail.
