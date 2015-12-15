@@ -80,12 +80,8 @@ init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout]) ->
                    parser_state = eredis_parser:init(),
                    queue = queue:new()},
 
-    case connect(State) of
-        {ok, NewState} ->
-            {ok, NewState};
-        {error, Reason} ->
-            {stop, Reason}
-    end.
+    self() ! initiate_connection,
+    {ok, State}.
 
 handle_call({request, Req}, From, State) ->
     do_request(Req, From, State);
@@ -143,24 +139,8 @@ handle_info({tcp_error, _Socket, _Reason}, State) ->
 %% clients. If desired, spawn of a new process which will try to reconnect and
 %% notify us when Redis is ready. In the meantime, we can respond with
 %% an error message to all our clients.
-handle_info({tcp_closed, _Socket}, #state{reconnect_sleep = no_reconnect,
-                                          queue = Queue} = State) ->
-    reply_all({error, tcp_closed}, Queue),
-    %% If we aren't going to reconnect, then there is nothing else for
-    %% this process to do.
-    {stop, normal, State#state{socket = undefined}};
-
-handle_info({tcp_closed, _Socket}, #state{queue = Queue} = State) ->
-    Self = self(),
-    spawn(fun() -> reconnect_loop(Self, State) end),
-
-    %% tell all of our clients what has happened.
-    reply_all({error, tcp_closed}, Queue),
-
-    %% Throw away the socket and the queue, as we will never get a
-    %% response to the requests sent on the old socket. The absence of
-    %% a socket is used to signal we are "down"
-    {noreply, State#state{socket = undefined, queue = queue:new()}};
+handle_info({tcp_closed, _Socket}, State) ->
+    maybe_reconnect(tcp_closed, State);
 
 %% Redis is ready to accept requests, the given Socket is a socket
 %% already connected and authenticated.
@@ -171,6 +151,14 @@ handle_info({connection_ready, Socket}, #state{socket = undefined} = State) ->
 %% that Poolboy uses to manage the connections.
 handle_info(stop, State) ->
     {stop, shutdown, State};
+
+handle_info(initiate_connection, #state{socket = undefined} = State) ->
+    case connect(State) of
+        {ok, NewState} ->
+            {noreply, NewState};
+        {error, Reason} ->
+            maybe_reconnect(Reason, State)
+    end;
 
 handle_info(_Info, State) ->
     {stop, {unhandled_message, _Info}, State}.
@@ -266,7 +254,7 @@ reply(Value, Queue) ->
         {empty, Queue} ->
             %% Oops
             error_logger:info_msg("Nothing in queue, but got value from parser~n"),
-            throw(empty_queue)
+            exit(empty_queue)
     end.
 
 %% @doc Send `Value' to each client in queue. Only useful for sending
@@ -368,6 +356,27 @@ do_sync_command(Socket, Command) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+maybe_reconnect(Reason, #state{reconnect_sleep = no_reconnect, queue = Queue} = State) ->
+    reply_all({error, Reason}, Queue),
+    %% If we aren't going to reconnect, then there is nothing else for
+    %% this process to do.
+    Reason1 = case Reason of
+                  tcp_closed -> normal;
+                  _Else -> Reason
+              end,
+    {stop, Reason1, State#state{socket = undefined}};
+maybe_reconnect(Reason, #state{queue = Queue} = State) ->
+    Self = self(),
+    spawn_link(fun() -> reconnect_loop(Self, State) end),
+
+    %% tell all of our clients what has happened.
+    reply_all({error, Reason}, Queue),
+
+    %% Throw away the socket and the queue, as we will never get a
+    %% response to the requests sent on the old socket. The absence of
+    %% a socket is used to signal we are "down"
+    {noreply, State#state{socket = undefined, queue = queue:new()}}.
 
 %% @doc: Loop until a connection can be established, this includes
 %% successfully issuing the auth and select calls. When we have a
