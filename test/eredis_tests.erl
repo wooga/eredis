@@ -136,6 +136,16 @@ multibulk_test_() ->
 undefined_database_test() ->
     ?assertMatch({ok,_}, eredis:start_link("localhost", 6379, undefined)).
 
+connection_failure_on_start_no_reconnect_test() ->
+    Res = eredis:start_link("this_host_does_not_exist", 6379, 0, "", no_reconnect),
+    ?assertMatch({ok, _}, Res),
+    {ok, ClientPid} = Res,
+    process_flag(trap_exit, true),
+    IsDied = receive {'EXIT', ClientPid, _} -> died
+             after 1000 -> still_alive end,
+    process_flag(trap_exit, false),
+    ?assertEqual(died, IsDied).
+
 tcp_closed_test() ->
     C = c(),
     tcp_closed_rig(C).
