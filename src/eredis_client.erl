@@ -80,8 +80,16 @@ init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout]) ->
                    parser_state = eredis_parser:init(),
                    queue = queue:new()},
 
-    self() ! initiate_connection,
-    {ok, State}.
+    case ReconnectSleep of
+        no_reconnect ->
+            case connect(State) of
+                {ok, _NewState} = Res -> Res;
+                {error, Reason} -> {stop, Reason}
+            end;
+        T when is_integer(T) ->
+            self() ! initiate_connection,
+            {ok, State}
+    end.
 
 handle_call({request, Req}, From, State) ->
     do_request(Req, From, State);
@@ -361,12 +369,10 @@ maybe_reconnect(Reason, #state{reconnect_sleep = no_reconnect, queue = Queue} = 
     reply_all({error, Reason}, Queue),
     %% If we aren't going to reconnect, then there is nothing else for
     %% this process to do.
-    Reason1 = case Reason of
-                  tcp_closed -> normal;
-                  _Else -> Reason
-              end,
-    {stop, Reason1, State#state{socket = undefined}};
+    {stop, normal, State#state{socket = undefined}};
 maybe_reconnect(Reason, #state{queue = Queue} = State) ->
+    error_logger:error_msg("Re-establishing connection to ~p:~p due to ~p",
+                           [State#state.host, State#state.port, Reason]),
     Self = self(),
     spawn_link(fun() -> reconnect_loop(Self, State) end),
 
