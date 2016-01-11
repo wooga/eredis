@@ -84,7 +84,7 @@ init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout]) ->
         {ok, NewState} ->
             {ok, NewState};
         {error, Reason} ->
-            {stop, {connection_error, Reason}}
+            {stop, Reason}
     end.
 
 handle_call({request, Req}, From, State) ->
