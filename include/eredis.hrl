@@ -33,6 +33,15 @@
 
 -define(NL, "\r\n").
 
--define(SOCKET_OPTS, [binary, {active, once}, {packet, raw}, {reuseaddr, true}]).
+-define(SOCKET_OPTS, [binary
+                     ,{active, once}
+                     ,{packet, raw}
+                     ,{reuseaddr, true}
+                      %% Set the VM buffer to max(sndbuf,
+                      %% recbuf). Ensures larger responses are
+                      %% buffered so there's less overhead in handling
+                      %% packets.
+                     ,{buffer, 2626560}
+                     ]).
 
 -define(RECV_TIMEOUT, 5000).
