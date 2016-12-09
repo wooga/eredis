@@ -116,7 +116,7 @@ parse(#pstate{state = status_continue,
 
 parse_multibulk(Data) when is_binary(Data) -> parse_multibulk(buffer_create(Data));
 
-parse_multibulk({[<<$*, _/binary>>| _], _} = Buffer) ->
+parse_multibulk(Buffer) ->
     case get_newline_pos(Buffer) of
         undefined ->
             {continue, {incomplete_size, Buffer}};
@@ -177,13 +177,17 @@ do_parse_multibulk(Count, Buffer, Acc) ->
 
 parse_bulk(Data) when is_binary(Data) -> parse_bulk(buffer_create(Data));
 
-parse_bulk({[<<$*, _Rest/binary>> | _], _} = Buffer) -> parse_multibulk(Buffer);
-parse_bulk({[<<$+, Data/binary>> | Rest], Size}) -> parse_simple({[Data | Rest], Size - 1});
-parse_bulk({[<<$-, Data/binary>> | Rest], Size}) -> parse_simple({[Data | Rest], Size - 1});
-parse_bulk({[<<$:, Data/binary>> | Rest], Size}) -> parse_simple({[Data | Rest], Size - 1});
+parse_bulk(Buffer) ->
+  case buffer_hd(Buffer) of
+    [$*] -> parse_multibulk(Buffer);
+    [$+] -> parse_simple(buffer_tl(Buffer));
+    [$-] -> parse_simple(buffer_tl(Buffer));
+    [$:] -> parse_simple(buffer_tl(Buffer));
+    [$$] -> do_parse_bulk(Buffer)
+  end.
 
 %% Bulk, at beginning of response
-parse_bulk({[<<$$, _/binary>> | _], _} = Buffer) ->
+do_parse_bulk(Buffer) ->
     %% Find the position of the first terminator, everything up until
     %% this point contains the size specifier. If we cannot find it,
     %% we received a partial response and need more data
@@ -274,6 +278,11 @@ buffer_append({List, Size}, Binary) ->
     [Head | Tail] -> [Head, Tail, Binary]
   end,
   {NewList, Size + byte_size(Binary)}.
+
+buffer_hd({[<<Char, _/binary>> | _], _}) -> [Char];
+buffer_hd({[], _}) -> [].
+
+buffer_tl({[<<_, RestBin/binary>> | Rest], Size}) -> {[RestBin | Rest], Size - 1}.
 
 buffer_to_binary({List, _}) -> iolist_to_binary(List).
 
