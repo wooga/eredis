@@ -10,7 +10,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(eredis_parser, [parse/2, init/0, parse_bulk/1, parse_bulk/2,
-                        parse_multibulk/1, parse_multibulk/2]).
+                        parse_multibulk/1, parse_multibulk/2, buffer_create/0, buffer_create/1]).
 
 
 % parse a binary one byte at a time
@@ -44,7 +44,8 @@ parse_split_bulk_test() ->
     B2 = <<"bar\r\n">>,
 
     {continue, State2} = parse(State1, B1),
-    ?assertEqual(#pstate{state = bulk_continue, continuation_data = {3, <<"\r\n">>}},
+    Buffer = buffer_create(<<"\r\n">>),
+    ?assertEqual(#pstate{state = bulk_continue, continuation_data = {3, Buffer}},
                  State2),
 
     ?assertMatch({ok, <<"bar">>, _}, parse(State2, B2)).
@@ -56,15 +57,17 @@ parse_very_split_bulk_test() ->
     B2 = <<"3\r\n">>,
     B3 = <<"foobarbazquux\r\n">>, %% 13 bytes
 
+    Buffer1 = buffer_create(<<"$1">>),
     ?assertEqual({continue,
                   #pstate{state = bulk_continue,
-                          continuation_data = {incomplete_size, <<"$1">>}}},
+                          continuation_data = {incomplete_size, Buffer1}}},
                  parse(State1, B1)),
     {continue, State2} = parse(State1, B1),
 
+    Buffer2 = buffer_create(<<"\r\n">>),
     ?assertEqual({continue,
                   #pstate{state = bulk_continue,
-                          continuation_data = {13, <<"\r\n">>}}},
+                          continuation_data = {13, Buffer2}}},
                  parse(State2, B2)),
     {continue, State3} = parse(State2, B2),
 
@@ -79,7 +82,8 @@ too_much_data_in_continuation_test() ->
     B1 = <<"$1\r\n">>,
     B2 = <<"1\r\n$1\r\n2\r\n$1\r\n3\r\n">>,
 
-    ?assertEqual({continue, {1, <<"\r\n">>}}, parse_bulk(B1)),
+    Buffer = buffer_create(<<"\r\n">>),
+    ?assertEqual({continue, {1, Buffer}}, parse_bulk(B1)),
     {continue, ContinuationData1} = parse_bulk(B1),
 
     ?assertEqual({ok, <<"1">>, <<"$1\r\n2\r\n$1\r\n3\r\n">>},
@@ -93,7 +97,8 @@ bulk_split_test() ->
     B1 = <<"$3\r\n">>,
     B2 = <<"bar\r\n">>,
 
-    ?assertEqual({continue, {3, <<"\r\n">>}}, parse_bulk(B1)),
+    Buffer = buffer_create(<<"\r\n">>),
+    ?assertEqual({continue, {3, Buffer}}, parse_bulk(B1)),
     {continue, Res} = parse_bulk(B1),
     ?assertEqual({ok, <<"bar">>, <<>>}, parse_bulk(Res, B2)).
 
@@ -102,10 +107,12 @@ bulk_very_split_test() ->
     B2 = <<"3\r\n">>,
     B3 = <<"foobarbazquux\r\n">>, %% 13 bytes
 
-    ?assertEqual({continue, {incomplete_size, <<"$1">>}}, parse_bulk(B1)),
+    Buffer1 = buffer_create(<<"$1">>),
+    ?assertEqual({continue, {incomplete_size, Buffer1}}, parse_bulk(B1)),
     {continue, ContinuationData1} = parse_bulk(B1),
 
-    ?assertEqual({continue, {13, <<"\r\n">>}}, parse_bulk(ContinuationData1, B2)),
+    Buffer2 = buffer_create(<<"\r\n">>),
+    ?assertEqual({continue, {13, Buffer2}}, parse_bulk(ContinuationData1, B2)),
     {continue, ContinuationData2} = parse_bulk(ContinuationData1, B2),
 
     ?assertEqual({ok, <<"foobarbazquux">>, <<>>}, parse_bulk(ContinuationData2, B3)).
@@ -114,7 +121,8 @@ bulk_split_on_newline_test() ->
     B1 = <<"$13\r\nfoobarbazquux">>,
     B2 = <<"\r\n">>, %% 13 bytes
 
-    ?assertEqual({continue, {13, <<"\r\nfoobarbazquux">>}}, parse_bulk(B1)),
+    Buffer = buffer_create(<<"\r\nfoobarbazquux">>),
+    ?assertEqual({continue, {13, Buffer}}, parse_bulk(B1)),
     {continue, ContinuationData1} = parse_bulk(B1),
     ?assertEqual({ok, <<"foobarbazquux">>, <<>>}, parse_bulk(ContinuationData1, B2)).
 
@@ -127,8 +135,9 @@ bulk_nil_chunked_test() ->
     State1 = init(),
     B1 = <<"$-1">>,
     B2 = <<"\r\n">>,
+    Buffer = buffer_create(<<"$-1">>),
     ?assertEqual({continue, #pstate{state = bulk_continue,
-                                    continuation_data = {incomplete_size,<<"$-1">>}}},
+                                    continuation_data = {incomplete_size,Buffer}}},
                  parse(State1, B1)),
 
     {continue, State2} = parse(State1, B1),
@@ -187,10 +196,11 @@ multibulk_split_parse_test() ->
 
     State1 = init(),
 
+    Buffer = buffer_create(<<"$1">>),
     ?assertEqual({continue,
                   #pstate{state = multibulk_continue,
                           continuation_data =
-                              {in_parsing_bulks,2,<<"$1">>,[<<"1">>]}}},
+                              {in_parsing_bulks,2,Buffer,[<<"1">>]}}},
                  parse(State1, B1)),
 
     {continue, State2} = parse(State1, B1),
@@ -213,7 +223,8 @@ multibulk_very_split_test() ->
     B3 = <<"\n1\r\n$1\r\n2\r\n$1">>,
     B4 = <<"\r\n3\r\n">>,
 
-    ?assertEqual({continue, {incomplete_size, <<"*">>}}, parse_multibulk(B1)),
+    Buffer = buffer_create(<<"*">>),
+    ?assertEqual({continue, {incomplete_size, Buffer}}, parse_multibulk(B1)),
     {continue, ContinuationData1} = parse_multibulk(B1),
     {continue, ContinuationData2} = parse_multibulk(ContinuationData1, B2),
     {continue, ContinuationData3} = parse_multibulk(ContinuationData2, B3),
@@ -225,7 +236,8 @@ multibulk_newline_split_test() ->
     %% Split into 4 parts: <<"*3\r\n$1\r\n1\r\n$1\r\n2\r\n$1\r\n3\r\n">>
     B1 = <<"*2\r\n$1\r\n1">>,
     B2 = <<"\r\n$1\r\n2\r\n">>,
-    ?assertEqual({continue, {in_parsing_bulks, 2, <<"$1\r\n1">>, []}},
+    Buffer = buffer_create(<<"$1\r\n1">>),
+    ?assertEqual({continue, {in_parsing_bulks, 2, Buffer, []}},
                  parse_multibulk(B1)),
 
     {continue, ContinuationData1} = parse_multibulk(B1),
@@ -266,7 +278,8 @@ chunk_test() ->
     {continue, ContinuationData1} = parse_multibulk(B1),
     {continue, ContinuationData2} = parse_multibulk(ContinuationData1, B2),
 
-    ?assertMatch({continue, {in_parsing_bulks, 2, <<>>, _}},
+    EmptyBuffer = buffer_create(),
+    ?assertMatch({continue, {in_parsing_bulks, 2, EmptyBuffer, _}},
                  parse_multibulk(ContinuationData2, B3)).
 
 %% @doc: Test a binary string which contains \r\n inside it's data
@@ -285,7 +298,7 @@ status_chunked_test() ->
     State1 = init(),
 
     ?assertEqual({continue, #pstate{state = status_continue,
-                                    continuation_data = {incomplete_simple, <<"O">>}}},
+                                    continuation_data = {incomplete_simple, buffer_create(<<"O">>)}}},
                  parse(State1, B1)),
     {continue, State2} = parse(State1, B1),
     ?assertEqual({ok, <<"OK">>, init()}, parse(State2, B2)).

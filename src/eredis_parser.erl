@@ -29,8 +29,7 @@
 
 %% Exported for testing
 -export([parse_bulk/1, parse_bulk/2,
-         parse_multibulk/1, parse_multibulk/2]).
-
+         parse_multibulk/1, parse_multibulk/2, buffer_create/0, buffer_create/1]).
 
 %%
 %% API
@@ -115,79 +114,85 @@ parse(#pstate{state = status_continue,
 %% MULTIBULK
 %%
 
-parse_multibulk(<<$*, _/binary>> = Data) ->
-    case get_newline_pos(Data) of
+parse_multibulk(Data) when is_binary(Data) -> parse_multibulk(buffer_create(Data));
+
+parse_multibulk({[<<$*, _/binary>>| _], _} = Buffer) ->
+    case get_newline_pos(Buffer) of
         undefined ->
-            {continue, {incomplete_size, Data}};
+            {continue, {incomplete_size, Buffer}};
         NewlinePos ->
             OffsetNewlinePos = NewlinePos - 1,
-            <<$*, Size:OffsetNewlinePos/binary, ?NL, Bulk/binary>> = Data,
+            <<$*, Size:OffsetNewlinePos/binary, ?NL, Bulk/binary>> = buffer_to_binary(Buffer),
             IntSize = list_to_integer(binary_to_list(Size)),
 
-            do_parse_multibulk(IntSize, Bulk)
+            do_parse_multibulk(IntSize, buffer_create(Bulk))
     end.
 
 %% Size of multibulk was incomplete, try again
-parse_multibulk({incomplete_size, PartialData}, NewData0) ->
-    NewData = <<PartialData/binary, NewData0/binary>>,
-    parse_multibulk(NewData);
+parse_multibulk({incomplete_size, Buffer}, NewData0) ->
+    NewBuffer = buffer_append(Buffer, NewData0),
+    parse_multibulk(NewBuffer);
 
 %% Ran out of data inside do_parse_multibulk in parse_bulk, must
 %% continue traversing the bulks
-parse_multibulk({in_parsing_bulks, Count, OldData, Acc},
+parse_multibulk({in_parsing_bulks, Count, Buffer, Acc},
                 NewData0) ->
-    NewData = <<OldData/binary, NewData0/binary>>,
+    NewBuffer = buffer_append(Buffer, NewData0),
 
     %% Continue where we left off
-    do_parse_multibulk(Count, NewData, Acc).
+    do_parse_multibulk(Count, NewBuffer, Acc).
 
 %% @doc: Parses the given number of bulks from Data. If Data does not
 %% contain enough bulks, {continue, ContinuationData} is returned with
 %% enough information to start parsing with the correct count and
 %% accumulated data.
-do_parse_multibulk(Count, Data) ->
-    do_parse_multibulk(Count, Data, []).
+do_parse_multibulk(Count, Buffer) ->
+    do_parse_multibulk(Count, Buffer, []).
 
-do_parse_multibulk(-1, Data, []) ->
-    {ok, undefined, Data};
-do_parse_multibulk(0, Data, Acc) ->
-    {ok, lists:reverse(Acc), Data};
-do_parse_multibulk(Count, <<>>, Acc) ->
-    {continue, {in_parsing_bulks, Count, <<>>, Acc}};
-do_parse_multibulk(Count, Data, Acc) ->
-    %% Try parsing the first bulk in Data, if it works, we get the
-    %% extra data back that was not part of the bulk which we can
-    %% recurse on.  If the bulk does not contain enough data, we
-    %% return with a continuation and enough data to pick up where we
-    %% left off. In the continuation we will get more data
-    %% automagically in Data, so parsing the bulk might work.
-    case parse_bulk(Data) of
-        {ok, Value, Rest} ->
-            do_parse_multibulk(Count - 1, Rest, [Value | Acc]);
-        {continue, _} ->
-            {continue, {in_parsing_bulks, Count, Data, Acc}}
+do_parse_multibulk(-1, Buffer, []) ->
+    {ok, undefined, buffer_to_binary(Buffer)};
+do_parse_multibulk(0, Buffer, Acc) ->
+    {ok, lists:reverse(Acc), buffer_to_binary(Buffer)};
+do_parse_multibulk(Count, Buffer, Acc) ->
+    case buffer_size(Buffer) == 0 of
+      true -> {continue, {in_parsing_bulks, Count, buffer_create(), Acc}};
+      false ->
+        %% Try parsing the first bulk in Data, if it works, we get the
+        %% extra data back that was not part of the bulk which we can
+        %% recurse on.  If the bulk does not contain enough data, we
+        %% return with a continuation and enough data to pick up where we
+        %% left off. In the continuation we will get more data
+        %% automagically in Data, so parsing the bulk might work.
+        case parse_bulk(Buffer) of
+            {ok, Value, Rest} ->
+                do_parse_multibulk(Count - 1, buffer_create(Rest), [Value | Acc]);
+            {continue, _} ->
+                {continue, {in_parsing_bulks, Count, Buffer, Acc}}
+        end
     end.
 
 %%
 %% BULK
 %%
 
-parse_bulk(<<$*, _Rest/binary>> = Data) -> parse_multibulk(Data);
-parse_bulk(<<$+, Data/binary>>) -> parse_simple(Data);
-parse_bulk(<<$-, Data/binary>>) -> parse_simple(Data);
-parse_bulk(<<$:, Data/binary>>) -> parse_simple(Data);
+parse_bulk(Data) when is_binary(Data) -> parse_bulk(buffer_create(Data));
+
+parse_bulk({[<<$*, _Rest/binary>> | _], _} = Buffer) -> parse_multibulk(Buffer);
+parse_bulk({[<<$+, Data/binary>> | Rest], Size}) -> parse_simple({[Data | Rest], Size - 1});
+parse_bulk({[<<$-, Data/binary>> | Rest], Size}) -> parse_simple({[Data | Rest], Size - 1});
+parse_bulk({[<<$:, Data/binary>> | Rest], Size}) -> parse_simple({[Data | Rest], Size - 1});
 
 %% Bulk, at beginning of response
-parse_bulk(<<$$, _/binary>> = Data) ->
+parse_bulk({[<<$$, _/binary>> | _], _} = Buffer) ->
     %% Find the position of the first terminator, everything up until
     %% this point contains the size specifier. If we cannot find it,
     %% we received a partial response and need more data
-    case get_newline_pos(Data) of
+    case get_newline_pos(Buffer) of
         undefined ->
-            {continue, {incomplete_size, Data}};
+            {continue, {incomplete_size, Buffer}};
         NewlinePos ->
             OffsetNewlinePos = NewlinePos - 1, % Take into account the first $
-            <<$$, Size:OffsetNewlinePos/binary, Bulk/binary>> = Data,
+            <<$$, Size:OffsetNewlinePos/binary, Bulk/binary>> = buffer_to_binary(Buffer),
             IntSize = list_to_integer(binary_to_list(Size)),
 
             if
@@ -202,25 +207,25 @@ parse_bulk(<<$$, _/binary>> = Data) ->
                 true ->
                     %% Need more data, so we send the bulk without the
                     %% size specifier to our future self
-                    {continue, {IntSize, Bulk}}
+                    {continue, {IntSize, buffer_create(Bulk)}}
             end
     end.
 
 %% Bulk, continuation from partial bulk size
-parse_bulk({incomplete_size, PartialData}, NewData0) ->
-    NewData = <<PartialData/binary, NewData0/binary>>,
-    parse_bulk(NewData);
+parse_bulk({incomplete_size, Buffer}, NewData0) ->
+    NewBuffer = buffer_append(Buffer, NewData0),
+    parse_bulk(NewBuffer);
 
 %% Bulk, continuation from partial bulk value
-parse_bulk({IntSize, Acc0}, Data) ->
-    Acc = <<Acc0/binary, Data/binary>>,
+parse_bulk({IntSize, Buffer0}, Data) ->
+    Buffer = buffer_append(Buffer0, Data),
 
-    if
-        size(Acc) - (size(<<?NL>>) * 2) >= IntSize ->
-            <<?NL, Value:IntSize/binary, ?NL, Rest/binary>> = Acc,
-            {ok, Value, Rest};
+    case buffer_size(Buffer) - (size(<<?NL>>) * 2) >= IntSize of
         true ->
-            {continue, {IntSize, Acc}}
+            <<?NL, Value:IntSize/binary, ?NL, Rest/binary>> = buffer_to_binary(Buffer),
+            {ok, Value, Rest};
+        false ->
+            {continue, {IntSize, Buffer}}
     end.
 
 
@@ -233,28 +238,46 @@ parse_bulk({IntSize, Acc0}, Data) ->
 
 %% @doc: Parse simple replies. Data must not contain type
 %% identifier. Type must be handled by the caller.
-parse_simple(Data) ->
-    case get_newline_pos(Data) of
+parse_simple(Data) when is_binary(Data) -> parse_simple(buffer_create(Data));
+
+parse_simple(Buffer) ->
+    case get_newline_pos(Buffer) of
         undefined ->
-            {continue, {incomplete_simple, Data}};
+            {continue, {incomplete_simple, Buffer}};
         NewlinePos ->
-            <<Value:NewlinePos/binary, ?NL, Rest/binary>> = Data,
+            <<Value:NewlinePos/binary, ?NL, Rest/binary>> = buffer_to_binary(Buffer),
             {ok, Value, Rest}
     end.
 
-parse_simple({incomplete_simple, OldData}, NewData0) ->
-    NewData = <<OldData/binary, NewData0/binary>>,
-    parse_simple(NewData).
+parse_simple({incomplete_simple, Buffer}, NewData0) ->
+    NewBuffer = buffer_append(Buffer, NewData0),
+    parse_simple(NewBuffer).
 
 %%
 %% INTERNAL HELPERS
 %%
-get_newline_pos(B) ->
+get_newline_pos({B, _}) ->
     case re:run(B, ?NL) of
         {match, [{Pos, _}]} -> Pos;
         nomatch -> undefined
     end.
 
+buffer_create() ->
+  {[], 0}.
+
+buffer_create(Data) ->
+  {[Data], byte_size(Data)}.
+
+buffer_append({List, Size}, Binary) ->
+  NewList = case List of
+    [] -> [Binary];
+    [Head | Tail] -> [Head, Tail, Binary]
+  end,
+  {NewList, Size + byte_size(Binary)}.
+
+buffer_to_binary({List, _}) -> iolist_to_binary(List).
+
+buffer_size({_, Size}) -> Size.
 
 %% @doc: Helper for handling the result of parsing. Will update the
 %% parser state with the continuation of given name if necessary.
