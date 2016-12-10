@@ -15,8 +15,6 @@
 %% of erldis.
 %%
 %% Future improvements:
-%%  * Instead of building a binary all the time in the continuation,
-%%    build an iolist
 %%  * When we return a bulk continuation, we also include the size of
 %%    the bulk. The caller may use this to explicitly call
 %%    gen_tcp:recv/2 with the desired size.
