@@ -14,7 +14,8 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, start_link/6, stop/1, q/2, q/3, qp/2, qp/3, q_noreply/2]).
+         start_link/5, start_link/6, stop/1, q/2, q/3, qp/2, qp/3, q_noreply/2,
+         q_async/2, q_async/3]).
 
 %% Exported for testing
 -export([create_multibulk/1]).
@@ -101,6 +102,18 @@ qp(Client, Pipeline, Timeout) ->
 %% @see q/2
 q_noreply(Client, Command) ->
     cast(Client, Command).
+
+-spec q_async(Client::client(), Command::[any()]) -> ok.
+% @doc Executes the command, and sends a message to this process with the response (with either error or success). Message is of the form `{response, Reply}', where `Reply' is the reply expected from `q/2'.
+q_async(Client, Command) ->
+    q_async(Client, Command, self()).
+
+-spec q_async(Client::client(), Command::[any()], Pid::pid()|atom()) -> ok.
+%% @doc Executes the command, and sends a message to `Pid' with the response (with either or success).
+%% @see 1_async/2
+q_async(Client, Command, Pid) when is_pid(Pid) ->
+    Request = {request, create_multibulk(Command), Pid},
+    gen_server:cast(Client, Request).
 
 %%
 %% INTERNAL HELPERS
