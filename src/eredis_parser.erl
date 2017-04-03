@@ -259,9 +259,9 @@ parse_simple({incomplete_simple, Buffer}, NewData0) ->
 %% INTERNAL HELPERS
 %%
 get_newline_pos({B, _}) ->
-    case re:run(B, ?NL) of
-        {match, [{Pos, _}]} -> Pos;
-        nomatch -> undefined
+    case binary:match(B, <<?NL>>) of
+       {Pos, _} -> Pos;
+       nomatch -> undefined
     end.
 
 buffer_create() ->
