@@ -149,8 +149,8 @@ to_bulk(B) when is_binary(B) ->
 %% as we do not want floats to be stored in Redis. Your future self
 %% will thank you for this.
 to_binary(X) when is_list(X)    -> list_to_binary(X);
-to_binary(X) when is_atom(X)    -> list_to_binary(atom_to_list(X));
+to_binary(X) when is_atom(X)    -> atom_to_binary(X, utf8);
 to_binary(X) when is_binary(X)  -> X;
-to_binary(X) when is_integer(X) -> list_to_binary(integer_to_list(X));
+to_binary(X) when is_integer(X) -> integer_to_binary(X);
 to_binary(X) when is_float(X)   -> throw({cannot_store_floats, X});
 to_binary(X)                    -> term_to_binary(X).
