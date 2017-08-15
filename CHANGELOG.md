@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## v1.1.0
+
+* Merged a ton of of old and neglected pull requests. Thanks to
+  patient contributors:
+  * Emil Falk
+  * Evgeny Khramtsov
+  * Kevin Wilson
+  * Luis Rascão
+  * Аверьянов Илья (savonarola on github)
+  * ololoru
+  * Giacomo Olgeni
+
+* Removed rebar binary, made everything a bit more rebar3 & mix
+  friendly.
+
+
 ## v1.0.8
 
 * Fixed include directive to work with rebar 2.5.1. Thanks to Feng Hao
