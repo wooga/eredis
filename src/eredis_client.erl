@@ -359,8 +359,10 @@ do_sync_command(Socket, Command) ->
 reconnect_loop(Client, #state{reconnect_sleep = ReconnectSleep} = State) ->
     case catch(connect(State)) of
         {ok, #state{socket = Socket}} ->
+            Client ! {connection_ready, Socket},
             gen_tcp:controlling_process(Socket, Client),
-            Client ! {connection_ready, Socket};
+            Msgs = get_all_messages([]),
+            [Client ! M || M <- Msgs];
         {error, _Reason} ->
             timer:sleep(ReconnectSleep),
             reconnect_loop(Client, State);
@@ -376,3 +378,12 @@ read_database(undefined) ->
     undefined;
 read_database(Database) when is_integer(Database) ->
     list_to_binary(integer_to_list(Database)).
+
+
+get_all_messages(Acc) ->
+    receive
+        M ->
+            [M | Acc]
+    after 0 ->
+        lists:reverse(Acc)
+    end.
