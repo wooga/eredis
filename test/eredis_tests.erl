@@ -10,7 +10,7 @@ connect_test() ->
     ?assertMatch({ok, _}, eredis:start_link("localhost", 6379)),
 
     case eredis:start_link("::1", 6379) of
-        {error, enetunreach} ->
+        {error, {connection_error, enetunreach}} ->
             %% Travis-CI has no IPv6
             ok;
         Result ->
