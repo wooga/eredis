@@ -6,3 +6,4 @@ Emakefile
 .DS_Store
 doc
 _build
+erl_crash.dump
