@@ -154,7 +154,7 @@ undefined_database_test() ->
 
 connection_failure_during_start_no_reconnect_test() ->
     process_flag(trap_exit, true),
-    Res = eredis:start_link("this_host_does_not_exist", 6379, 0, "", no_reconnect),
+    Res = eredis:start_link("localhost", 6378, 0, "", no_reconnect),
     ?assertMatch({error, _}, Res),
     IsDied = receive {'EXIT', _, _} -> died
              after 1000 -> still_alive end,
@@ -163,7 +163,7 @@ connection_failure_during_start_no_reconnect_test() ->
 
 connection_failure_during_start_reconnect_test() ->
     process_flag(trap_exit, true),
-    Res = eredis:start_link("this_host_does_not_exist", 6379, 0, "", 100),
+    Res = eredis:start_link("localhost", 6378, 0, "", 100),
     ?assertMatch({ok, _}, Res),
     {ok, ClientPid} = Res,
     IsDied = receive {'EXIT', ClientPid, _} -> died
