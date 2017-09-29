@@ -180,8 +180,8 @@ handle_info({tcp_closed, _Socket}, State) ->
     spawn(fun() -> reconnect_loop(Self, State) end),
 
     %% Throw away the socket. The absence of a socket is used to
-    %% signal we are "down"
-    {noreply, State#state{socket = undefined}};
+    %% signal we are "down"; discard possibly patrially parsed data
+    {noreply, State#state{socket = undefined, parser_state = eredis_parser:init()}};
 
 %% Controller might want to be notified about every reconnect attempt
 handle_info(reconnect_attempt, State) ->
