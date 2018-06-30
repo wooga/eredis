@@ -1,4 +1,5 @@
 language: erlang
+sudo: required
 notifications:
   email: false
 otp_release:
