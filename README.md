@@ -23,6 +23,10 @@ copy and paste the following into a shell to try out Eredis:
     {ok, <<"OK">>} = eredis:q(C, ["SET", "foo", "bar"]).
     {ok, <<"bar">>} = eredis:q(C, ["GET", "foo"]).
 
+To connect to a Redis instance listening on a Unix domain socket:
+
+    {ok, C1} = eredis:start_link({local, "/var/run/redis.sock"}, 0).
+
 MSET and MGET:
 
 ```erlang
@@ -114,7 +118,7 @@ To start the client, use any of the `eredis:start_link/0,1,2,3,4,5`
 functions. They all include sensible defaults. `start_link/5` takes
 the following arguments:
 
-* Host, dns name or ip adress as string
+* Host, dns name or ip adress as string; or unix domain socket as {local, Path} (available in OTP 19+)
 * Port, integer, default is 6379
 * Database, integer or 0 for default database
 * Password, string or empty string([]) for no password

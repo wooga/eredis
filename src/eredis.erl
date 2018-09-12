@@ -47,7 +47,8 @@ start_link(Host, Port, Database, Password, ReconnectSleep) ->
     start_link(Host, Port, Database, Password, ReconnectSleep, ?TIMEOUT).
 
 start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout)
-  when is_list(Host),
+  when is_list(Host) orelse
+            (is_tuple(Host) andalso tuple_size(Host) =:= 2 andalso element(1, Host) =:= local),
        is_integer(Port),
        is_integer(Database) orelse Database == undefined,
        is_list(Password),

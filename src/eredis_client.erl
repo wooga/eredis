@@ -302,7 +302,11 @@ safe_send(Pid, Value) ->
 %% {SomeError, Reason}.
 connect(State) ->
     {ok, {AFamily, Addr}} = get_addr(State#state.host),
-    case gen_tcp:connect(Addr, State#state.port,
+    Port = case AFamily of
+        local -> 0;
+        _ -> State#state.port
+    end,
+    case gen_tcp:connect(Addr, Port,
                          [AFamily | ?SOCKET_OPTS], State#state.connect_timeout) of
         {ok, Socket} ->
             case authenticate(Socket, State#state.password) of
@@ -320,6 +324,8 @@ connect(State) ->
             {error, {connection_error, Reason}}
     end.
 
+get_addr({local, Path}) ->
+    {ok, {local, {local, Path}}};
 get_addr(Hostname) ->
     case inet:parse_address(Hostname) of
         {ok, {_,_,_,_} = Addr} ->         {ok, {inet, Addr}};
