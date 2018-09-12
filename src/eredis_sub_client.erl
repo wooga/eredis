@@ -354,5 +354,4 @@ reconnect_loop(Client, #state{reconnect_sleep=ReconnectSleep}=State) ->
 send_to_controller(_Msg, #state{controlling_process=undefined}) ->
     ok;
 send_to_controller(Msg, #state{controlling_process={_Ref, Pid}}) ->
-    %%error_logger:info_msg("~p ! ~p~n", [Pid, Msg]),
     Pid ! Msg.

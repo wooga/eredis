@@ -261,7 +261,7 @@ reply(Value, Queue) ->
             queue:in_r({N - 1, From, [Value | Replies]}, NewQueue);
         {empty, Queue} ->
             %% Oops
-            error_logger:info_msg("Nothing in queue, but got value from parser~n"),
+            error_logger:info_msg("eredis: Nothing in queue, but got value from parser~n"),
             exit(empty_queue)
     end.
 
@@ -293,7 +293,7 @@ safe_send(Pid, Value) ->
     try erlang:send(Pid, Value)
     catch
         Err:Reason ->
-            error_logger:info_msg("Failed to send message to ~p with reason ~p~n", [Pid, {Err, Reason}])
+            error_logger:info_msg("eredis: Failed to send message to ~p with reason ~p~n", [Pid, {Err, Reason}])
     end.
 
 %% @doc: Helper for connecting to Redis, authenticating and selecting
@@ -377,7 +377,7 @@ maybe_reconnect(Reason, #state{reconnect_sleep = no_reconnect, queue = Queue} = 
     %% this process to do.
     {stop, normal, State#state{socket = undefined}};
 maybe_reconnect(Reason, #state{queue = Queue} = State) ->
-    error_logger:error_msg("Re-establishing connection to ~p:~p due to ~p",
+    error_logger:error_msg("eredis: Re-establishing connection to ~p:~p due to ~p",
                            [State#state.host, State#state.port, Reason]),
     Self = self(),
     spawn_link(fun() -> reconnect_loop(Self, State) end),
