@@ -14,7 +14,7 @@
 -define(TIMEOUT, 5000).
 
 -export([start_link/0, start_link/1, start_link/2, start_link/3, start_link/4,
-         start_link/5, start_link/6, stop/1, q/2, q/3, qp/2, qp/3, q_noreply/2,
+         start_link/5, start_link/6, start_link/7, stop/1, q/2, q/3, qp/2, qp/3, q_noreply/2,
          q_async/2, q_async/3]).
 
 %% Exported for testing
@@ -46,17 +46,21 @@ start_link(Host, Port, Database, Password) ->
 start_link(Host, Port, Database, Password, ReconnectSleep) ->
     start_link(Host, Port, Database, Password, ReconnectSleep, ?TIMEOUT).
 
-start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout)
+start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout) ->
+    start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout, []).
+
+start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout, SocketOptions)
   when is_list(Host) orelse
             (is_tuple(Host) andalso tuple_size(Host) =:= 2 andalso element(1, Host) =:= local),
        is_integer(Port),
        is_integer(Database) orelse Database == undefined,
        is_list(Password),
        is_integer(ReconnectSleep) orelse ReconnectSleep =:= no_reconnect,
-       is_integer(ConnectTimeout) ->
+       is_integer(ConnectTimeout),
+       is_list(SocketOptions) ->
 
     eredis_client:start_link(Host, Port, Database, Password,
-                             ReconnectSleep, ConnectTimeout).
+                             ReconnectSleep, ConnectTimeout, SocketOptions).
 
 %% @doc: Callback for starting from poolboy
 -spec start_link(server_args()) -> {ok, Pid::pid()} | {error, Reason::term()}.
@@ -67,7 +71,9 @@ start_link(Args) ->
     Password       = proplists:get_value(password, Args, ""),
     ReconnectSleep = proplists:get_value(reconnect_sleep, Args, 100),
     ConnectTimeout = proplists:get_value(connect_timeout, Args, ?TIMEOUT),
-    start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout).
+    SocketOptions  = proplists:get_value(socket_options, Args, []),
+
+    start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout, SocketOptions).
 
 stop(Client) ->
     eredis_client:stop(Client).

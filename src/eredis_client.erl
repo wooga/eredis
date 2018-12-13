@@ -25,7 +25,7 @@
 -include("eredis.hrl").
 
 %% API
--export([start_link/6, stop/1, select_database/2]).
+-export([start_link/7, stop/1, select_database/2]).
 
 -export([do_sync_command/2]).
 
@@ -40,6 +40,7 @@
           database :: binary() | undefined,
           reconnect_sleep :: reconnect_sleep() | undefined,
           connect_timeout :: integer() | undefined,
+          socket_options :: list(),
 
           socket :: port() | undefined,
           parser_state :: #pstate{} | undefined,
@@ -55,11 +56,12 @@
                  Database::integer() | undefined,
                  Password::string(),
                  ReconnectSleep::reconnect_sleep(),
-                 ConnectTimeout::integer() | undefined) ->
+                 ConnectTimeout::integer() | undefined,
+                 SocketOptions::list()) ->
                         {ok, Pid::pid()} | {error, Reason::term()}.
-start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout) ->
+start_link(Host, Port, Database, Password, ReconnectSleep, ConnectTimeout, SocketOptions) ->
     gen_server:start_link(?MODULE, [Host, Port, Database, Password,
-                                    ReconnectSleep, ConnectTimeout], []).
+                                    ReconnectSleep, ConnectTimeout, SocketOptions], []).
 
 
 stop(Pid) ->
@@ -69,13 +71,14 @@ stop(Pid) ->
 %% gen_server callbacks
 %%====================================================================
 
-init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout]) ->
+init([Host, Port, Database, Password, ReconnectSleep, ConnectTimeout, SocketOptions]) ->
     State = #state{host = Host,
                    port = Port,
                    database = read_database(Database),
                    password = list_to_binary(Password),
                    reconnect_sleep = ReconnectSleep,
                    connect_timeout = ConnectTimeout,
+                   socket_options = SocketOptions,
 
                    parser_state = eredis_parser:init(),
                    queue = queue:new()},
@@ -306,8 +309,11 @@ connect(State) ->
         local -> 0;
         _ -> State#state.port
     end,
-    case gen_tcp:connect(Addr, Port,
-                         [AFamily | ?SOCKET_OPTS], State#state.connect_timeout) of
+
+    SocketOptions = lists:ukeymerge(1, lists:keysort(1, State#state.socket_options), lists:keysort(1, ?SOCKET_OPTS)),
+    ConnectOptions = [AFamily | [?SOCKET_MODE | SocketOptions]],
+
+    case gen_tcp:connect(Addr, Port, ConnectOptions, State#state.connect_timeout) of
         {ok, Socket} ->
             case authenticate(Socket, State#state.password) of
                 ok ->

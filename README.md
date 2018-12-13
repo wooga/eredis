@@ -114,8 +114,8 @@ requests, you may use `eredis:qp(Client::pid(),
 where the values are the redis responses in the same order as the
 commands you provided.
 
-To start the client, use any of the `eredis:start_link/0,1,2,3,4,5`
-functions. They all include sensible defaults. `start_link/5` takes
+To start the client, use any of the `eredis:start_link/0,1,2,3,4,5,6,7`
+functions. They all include sensible defaults. `start_link/7` takes
 the following arguments:
 
 * Host, dns name or ip adress as string; or unix domain socket as {local, Path} (available in OTP 19+)
@@ -123,6 +123,8 @@ the following arguments:
 * Database, integer or 0 for default database
 * Password, string or empty string([]) for no password
 * Reconnect sleep, integer of milliseconds to sleep between reconnect attempts
+* Connect timeout, timeout value in milliseconds to use in `gen_tcp:connect`, default is 5000
+* Socket options, proplist of options to be sent to `gen_tcp:connect`, default is `?SOCKET_OPTS`
 
 ## Reconnecting on Redis down / network failure / timeout / etc
 
