@@ -9,6 +9,10 @@ connect_test() ->
     ?assertMatch({ok, _}, eredis:start_link("127.0.0.1", 6379)),
     ?assertMatch({ok, _}, eredis:start_link("localhost", 6379)).
 
+connect_socket_options_test() ->
+    ?assertMatch({ok, _}, eredis:start_link([{socket_options, [{keepalive, true}]}])),
+    ?assertMatch({ok, _}, eredis:start_link("localhost", 6379, 0, "",100, 5000, [{keepalive, true}])).
+
 get_set_test() ->
     C = c(),
     ?assertMatch({ok, _}, eredis:q(C, ["DEL", foo])),
@@ -156,20 +160,20 @@ connection_failure_during_start_no_reconnect_test() ->
     process_flag(trap_exit, true),
     Res = eredis:start_link("localhost", 6378, 0, "", no_reconnect),
     ?assertMatch({error, _}, Res),
-    IsDied = receive {'EXIT', _, _} -> died
+    IsDead = receive {'EXIT', _, _} -> died
              after 1000 -> still_alive end,
     process_flag(trap_exit, false),
-    ?assertEqual(died, IsDied).
+    ?assertEqual(died, IsDead).
 
 connection_failure_during_start_reconnect_test() ->
     process_flag(trap_exit, true),
     Res = eredis:start_link("localhost", 6378, 0, "", 100),
     ?assertMatch({ok, _}, Res),
     {ok, ClientPid} = Res,
-    IsDied = receive {'EXIT', ClientPid, _} -> died
+    IsDead = receive {'EXIT', ClientPid, _} -> died
              after 400 -> still_alive end,
     process_flag(trap_exit, false),
-    ?assertEqual(still_alive, IsDied).
+    ?assertEqual(still_alive, IsDead).
 
 tcp_closed_test() ->
     C = c(),

@@ -29,11 +29,6 @@ add_channels(Sub, Channels) ->
               end
       end, Channels).
 
-
-
-
-
-
 pubsub_test() ->
     Pub = c(),
     Sub = s(),
