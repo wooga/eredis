@@ -26,7 +26,7 @@
                   {atom(),atom()} |
                   {global,term()} |
                   {via,atom(),term()}.
-
+-export_type([client/0]).
 %%
 %% PUBLIC API
 %%
