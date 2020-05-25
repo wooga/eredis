@@ -74,7 +74,7 @@ parse(#pstate{state = undefined} = State, NewData) ->
 
         %% Error
         <<$-, Data/binary>> ->
-            return_error(parse_simple(Data), State, status_continue);
+            return_error(parse_simple(Data), State, error_continue);
 
         %% Integer reply
         <<$:, Data/binary>> ->
@@ -106,7 +106,11 @@ parse(#pstate{state = multibulk_continue,
 
 parse(#pstate{state = status_continue,
              continuation_data = ContinuationData} = State, NewData) ->
-    return_result(parse_simple(ContinuationData, NewData), State, status_continue).
+    return_result(parse_simple(ContinuationData, NewData), State, status_continue);
+
+parse(#pstate{state = error_continue,
+             continuation_data = ContinuationData} = State, NewData) ->
+    return_error(parse_simple(ContinuationData, NewData), State, error_continue).
 
 %%
 %% MULTIBULK

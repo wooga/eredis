@@ -15,7 +15,7 @@
 %% functions. This is used to continue where we left off the next time
 %% the user calls parse/2.
 -type continuation_data() :: any().
--type parser_state() :: status_continue | bulk_continue | multibulk_continue.
+-type parser_state() :: status_continue | bulk_continue | multibulk_continue | error_continue.
 
 %% Internal types
 -ifdef(namespaced_types).

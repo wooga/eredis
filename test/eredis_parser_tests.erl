@@ -308,6 +308,19 @@ error_test() ->
     ?assertEqual({error, <<"ERR wrong number of arguments for 'get' command">>, init()},
                  parse(init(), B)).
 
+error_chunked_test() ->
+    B1 = <<"-ERR">>,
+    B2 = <<" wrong number of arguments for 'get' command\r\n">>,
+    State1 = init(),
+
+    {continue, State2} = parse(State1, B1),
+    Buffer = buffer_create(<<"ERR">>),
+    ?assertEqual(#pstate{state = error_continue, continuation_data = {incomplete_simple, Buffer}},
+                 State2),
+
+    ?assertEqual({error, <<"ERR wrong number of arguments for 'get' command">>, init()},
+                 parse(State2, B2)).
+
 integer_test() ->
     B = <<":2\r\n">>,
     ?assertEqual({ok, <<"2">>, init()}, parse(init(), B)).
