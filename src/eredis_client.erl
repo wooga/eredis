@@ -371,6 +371,7 @@ do_sync_command(Socket, Command) ->
                     ok = inet:setopts(Socket, [{active, once}]),
                     ok;
                 Other ->
+                    ok = inet:setopts(Socket, [{active, once}]),
                     {error, {unexpected_data, Other}}
             end;
         {error, Reason} ->
