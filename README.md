@@ -15,7 +15,7 @@ Supported Redis features:
 If you have Redis running on localhost, with default settings, you may
 copy and paste the following into a shell to try out Eredis:
 
-    git clone git://github.com/wooga/eredis.git
+    git clone https://github.com/wooga/eredis.git
     cd eredis
     ./rebar compile
     erl -pa ebin/
